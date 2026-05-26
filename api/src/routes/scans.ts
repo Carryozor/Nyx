@@ -99,15 +99,33 @@ export function registerScanRoutes(app: FastifyInstance): void {
 
   app.get('/scans', { preHandler: requireAuth }, async (req, reply) => {
     const db = getDb()
-    const jobs = req.user.role === 'admin'
-      ? db.prepare('SELECT id, profile_id, status, created_at, started_at, finished_at FROM scan_jobs ORDER BY created_at DESC LIMIT 50').all()
+    const base = req.user.role === 'admin'
+      ? db.prepare('SELECT id, profile_id, status, created_at, started_at, finished_at FROM scan_jobs ORDER BY created_at DESC LIMIT 50').all() as ScanJobRow[]
       : db.prepare(`
           SELECT sj.id, sj.profile_id, sj.status, sj.created_at, sj.started_at, sj.finished_at
           FROM scan_jobs sj
           JOIN profiles p ON p.id = sj.profile_id
           WHERE p.user_id = ?
           ORDER BY sj.created_at DESC LIMIT 50
-        `).all(req.user.id)
+        `).all(req.user.id) as ScanJobRow[]
+
+    const stats = db.prepare(`
+      SELECT profile_id,
+        count(*) as total,
+        sum(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        sum(CASE WHEN status IN ('confirmed','already_removed') THEN 1 ELSE 0 END) as confirmed,
+        sum(CASE WHEN status = 'awaiting_email' THEN 1 ELSE 0 END) as awaiting_email,
+        sum(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as submitted
+      FROM opt_out_requests GROUP BY profile_id
+    `).all() as { profile_id: string; total: number; failed: number; confirmed: number; awaiting_email: number; submitted: number }[]
+
+    const statsMap = new Map(stats.map(s => [s.profile_id, s]))
+
+    const jobs = base.map(j => ({
+      ...j,
+      stats: statsMap.get(j.profile_id) ?? null,
+    }))
+
     return reply.send(jobs)
   })
 }

@@ -56,6 +56,14 @@ export interface OptOutRequest {
   broker_url?: string
 }
 
+export interface ScanJobStats {
+  total:         number
+  failed:        number
+  confirmed:     number
+  awaiting_email: number
+  submitted:     number
+}
+
 export interface ScanJob {
   id: string
   profile_id: string
@@ -64,6 +72,7 @@ export interface ScanJob {
   created_at: string
   started_at: string | null
   finished_at: string | null
+  stats?: ScanJobStats | null
 }
 
 export interface Invitation {
