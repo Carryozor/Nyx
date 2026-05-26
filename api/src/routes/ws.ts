@@ -52,26 +52,26 @@ function broadcastPending(): void {
 }
 
 export function registerWsRoutes(app: FastifyInstance): void {
-  app.get('/ws', { websocket: true }, (socket: WebSocket) => {
-    let authed = false
+  app.get('/ws', { websocket: true }, (socket: WebSocket, req) => {
     let client: ConnectedClient | null = null
 
-    socket.on('message', (raw: Buffer) => {
-      const msg = JSON.parse(raw.toString()) as { type: string; token?: string }
-
-      if (msg.type === 'auth' && msg.token && !authed) {
-        try {
-          const user = verifyToken(msg.token)
-          client = { ws: socket, user }
-          clients.add(client)
-          authed = true
-          socket.send(JSON.stringify({ type: 'auth:ok', userId: user.id }))
-        } catch {
-          socket.send(JSON.stringify({ type: 'auth:error', error: 'Invalid token' }))
-          socket.close()
-        }
+    const cookieToken = (req.cookies as Record<string, string>)?.nyx_session
+    if (cookieToken) {
+      try {
+        const user = verifyToken(cookieToken)
+        client = { ws: socket, user }
+        clients.add(client)
+        socket.send(JSON.stringify({ type: 'auth:ok', userId: user.id }))
+      } catch {
+        socket.send(JSON.stringify({ type: 'auth:error', error: 'Invalid session' }))
+        socket.close()
+        return
       }
-    })
+    } else {
+      socket.send(JSON.stringify({ type: 'auth:error', error: 'No session cookie' }))
+      socket.close()
+      return
+    }
 
     socket.on('close', () => {
       if (client) clients.delete(client)

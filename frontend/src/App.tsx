@@ -5,8 +5,9 @@ import { Layout }       from './components/Layout.js'
 import { Login }        from './pages/Login.js'
 import { Register }     from './pages/Register.js'
 import { Dashboard }    from './pages/Dashboard.js'
-import { Profiles }     from './pages/Profiles.js'
-import { ProfileWizard } from './pages/ProfileWizard.js'
+import { Profiles }      from './pages/Profiles.js'
+import { ProfileWizard }  from './pages/ProfileWizard.js'
+import { ProfileDetail }  from './pages/ProfileDetail.js'
 import { Brokers }      from './pages/Brokers.js'
 import { ManualGuide }  from './pages/ManualGuide.js'
 import { History }      from './pages/History.js'
@@ -46,8 +47,9 @@ export function App() {
           <Layout>
             <Routes>
               <Route index             element={<Dashboard />} />
-              <Route path="profiles"   element={<Profiles />} />
+              <Route path="profiles"      element={<Profiles />} />
               <Route path="profiles/new" element={<ProfileWizard />} />
+              <Route path="profiles/:id" element={<ProfileDetail />} />
               <Route path="brokers"    element={<Brokers />} />
               <Route path="history"    element={<History />} />
               <Route path="guide"      element={<ManualGuide />} />
