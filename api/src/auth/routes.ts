@@ -85,7 +85,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       .setCookie('nyx_session', token, {
         httpOnly: true,
         sameSite: 'strict',
-        secure:   process.env.NODE_ENV === 'production',
+        secure:   false,
         path:     '/',
         maxAge:   8 * 3600,
       })
