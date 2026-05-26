@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Moon } from 'lucide-react'
 import { useAuthStore } from '../store/auth.js'
+import { api } from '../api/client.js'
 
 export function Login() {
   const [email, setEmail]       = useState('')
@@ -9,6 +10,13 @@ export function Login() {
   const [error, setError]       = useState('')
   const { login, loading }      = useAuthStore()
   const navigate                = useNavigate()
+
+  useEffect(() => {
+    api.me().then(() => {}).catch(() => {})
+    fetch('/auth/setup').then(r => r.json()).then(({ initialized }) => {
+      if (!initialized) navigate('/register', { replace: true })
+    }).catch(() => {})
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -8,6 +8,12 @@ import type { UserRow, InvitationRow } from '../types.js'
 
 export function registerAuthRoutes(app: FastifyInstance): void {
 
+  app.get('/auth/setup', async (_req, reply) => {
+    const db = getDb()
+    const { n } = db.prepare('SELECT count(*) as n FROM users').get() as { n: number }
+    return reply.send({ initialized: n > 0 })
+  })
+
   app.post('/auth/register', async (req, reply) => {
     const { email, password, invitationToken } = req.body as {
       email: string

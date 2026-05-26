@@ -47,13 +47,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     const { fileURLToPath } = await import('node:url')
     const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+    const distRoot = path.resolve(config.FRONTEND_DIST)
     await app.register(fastifyStatic, {
-      root:            path.resolve(__dirname, '../../', config.FRONTEND_DIST),
-      prefix:          '/',
-      decorateReply:   false,
+      root:   distRoot,
+      prefix: '/',
     })
     app.setNotFoundHandler(async (_req, reply) => {
-      return reply.sendFile('index.html')
+      return reply.sendFile('index.html', distRoot)
     })
   }
 
