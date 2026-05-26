@@ -1,0 +1,6 @@
+{
+  "name": "nyx",
+  "private": true,
+  "workspaces": ["api", "worker", "frontend"],
+  "engines": { "node": ">=22" }
+}
