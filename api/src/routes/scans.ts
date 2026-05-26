@@ -1,0 +1,113 @@
+import type { FastifyInstance } from 'fastify'
+import { v4 as uuid } from 'uuid'
+import { getDb } from '../db/client.js'
+import { config } from '../config.js'
+import { verifyPassword } from '../crypto/argon.js'
+import { deriveKey } from '../crypto/kdf.js'
+import { encrypt } from '../crypto/aes.js'
+import { requireAuth } from '../auth/middleware.js'
+import type { UserRow, ProfileRow, ScanJobRow, BrokerRow } from '../types.js'
+
+async function encryptKeyForWorker(piiKey: Buffer): Promise<string> {
+  const workerKeyBuf = Buffer.from(config.WORKER_SECRET.padEnd(32, '0').slice(0, 32))
+  const salt = Buffer.from(config.WORKER_SECRET).toString('hex').slice(0, 64).padEnd(64, '0')
+  const blob = encrypt(piiKey.toString('hex'), workerKeyBuf, salt)
+  return JSON.stringify(blob)
+}
+
+export function registerScanRoutes(app: FastifyInstance): void {
+
+  app.post('/scans', { preHandler: requireAuth }, async (req, reply) => {
+    const { profileId, password, brokerIds } = req.body as {
+      profileId:  string
+      password:   string
+      brokerIds?: string[]
+    }
+
+    if (!profileId || !password) {
+      return reply.code(400).send({ error: 'profileId and password required' })
+    }
+
+    const db = getDb()
+
+    const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(profileId) as ProfileRow | undefined
+    if (!profile) return reply.code(404).send({ error: 'Profile not found' })
+    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
+      return reply.code(403).send({ error: 'Forbidden' })
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
+    if (!(await verifyPassword(password, user.password_hash))) {
+      return reply.code(401).send({ error: 'Wrong password' })
+    }
+
+    const piiBlob = JSON.parse(profile.encrypted_pii)
+    const piiKey  = await deriveKey(password, piiBlob.salt)
+    const encryptedJobKey = await encryptKeyForWorker(piiKey)
+
+    const brokers: BrokerRow[] = brokerIds?.length
+      ? db.prepare(`SELECT * FROM brokers WHERE id IN (${brokerIds.map(() => '?').join(',')}) AND active = 1`).all(...brokerIds) as BrokerRow[]
+      : db.prepare("SELECT * FROM brokers WHERE active = 1 AND type IN ('auto','semi')").all() as BrokerRow[]
+
+    const jobId      = uuid()
+    const created_at = new Date().toISOString()
+
+    db.prepare(
+      'INSERT INTO scan_jobs (id, profile_id, broker_ids, status, encrypted_job_key, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(
+      jobId, profileId,
+      brokerIds ? JSON.stringify(brokerIds) : null,
+      'queued',
+      encryptedJobKey,
+      created_at,
+      req.user.id,
+    )
+
+    const insertOpt = db.prepare(`
+      INSERT OR IGNORE INTO opt_out_requests (id, profile_id, broker_id, status)
+      VALUES (?, ?, ?, 'pending')
+    `)
+    for (const broker of brokers) {
+      insertOpt.run(uuid(), profileId, broker.id)
+    }
+
+    return reply.code(201).send({
+      id:           jobId,
+      profile_id:   profileId,
+      status:       'queued',
+      broker_count: brokers.length,
+      created_at,
+    })
+  })
+
+  app.get('/scans/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const db = getDb()
+    const job = db.prepare(
+      'SELECT id, profile_id, broker_ids, status, created_at, started_at, finished_at, created_by FROM scan_jobs WHERE id = ?'
+    ).get(id) as Omit<ScanJobRow, 'encrypted_job_key'> | undefined
+
+    if (!job) return reply.code(404).send({ error: 'Not found' })
+
+    const profile = db.prepare('SELECT user_id FROM profiles WHERE id = ?').get(job.profile_id) as { user_id: string }
+    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
+      return reply.code(403).send({ error: 'Forbidden' })
+    }
+
+    return reply.send(job)
+  })
+
+  app.get('/scans', { preHandler: requireAuth }, async (req, reply) => {
+    const db = getDb()
+    const jobs = req.user.role === 'admin'
+      ? db.prepare('SELECT id, profile_id, status, created_at, started_at, finished_at FROM scan_jobs ORDER BY created_at DESC LIMIT 50').all()
+      : db.prepare(`
+          SELECT sj.id, sj.profile_id, sj.status, sj.created_at, sj.started_at, sj.finished_at
+          FROM scan_jobs sj
+          JOIN profiles p ON p.id = sj.profile_id
+          WHERE p.user_id = ?
+          ORDER BY sj.created_at DESC LIMIT 50
+        `).all(req.user.id)
+    return reply.send(jobs)
+  })
+}
