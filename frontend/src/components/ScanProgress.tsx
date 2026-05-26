@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { X, Loader2, CheckCircle } from 'lucide-react'
 import type { ScanProgress as ScanProgressType } from '../hooks/useWebSocket.js'
 
@@ -7,6 +8,17 @@ interface Props {
 }
 
 export function ScanProgress({ scans, onDismiss }: Props) {
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = []
+    for (const scan of scans.values()) {
+      const done = scan.done >= scan.total && scan.total > 0
+      if (done) {
+        timers.push(setTimeout(() => onDismiss(scan.jobId), 6000))
+      }
+    }
+    return () => timers.forEach(clearTimeout)
+  }, [scans, onDismiss])
+
   if (scans.size === 0) return null
 
   return (
@@ -26,11 +38,9 @@ export function ScanProgress({ scans, onDismiss }: Props) {
                   {done ? 'Scan complete' : 'Scanning brokers…'}
                 </span>
               </div>
-              {done && (
-                <button onClick={() => onDismiss(scan.jobId)} className="text-slate-400 hover:text-white">
-                  <X size={16} />
-                </button>
-              )}
+              <button onClick={() => onDismiss(scan.jobId)} className="text-slate-400 hover:text-white">
+                <X size={16} />
+              </button>
             </div>
             {scan.currentBroker && !done && (
               <p className="text-xs text-slate-400 mb-2 truncate">{scan.currentBroker}</p>

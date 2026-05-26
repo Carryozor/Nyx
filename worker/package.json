@@ -11,7 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@playwright/test": "^1.49.1",
+    "@playwright/test": "^1.60.0",
     "argon2": "^0.31.2",
     "better-sqlite3": "^11.7.0",
     "node-cron": "^3.0.3",

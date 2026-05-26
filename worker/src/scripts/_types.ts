@@ -4,6 +4,7 @@ export interface DecryptedPII {
   firstName: string
   lastName: string
   dob: string
+  email?: string
   phone?: string
   aliases?: string[]
   currentAddress: Address

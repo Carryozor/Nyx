@@ -95,6 +95,38 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     return reply.send({ id, label: profile.label, pii })
   })
 
+  app.patch('/profiles/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const { label, password, pii } = req.body as { label?: string; password: string; pii?: ProfilePII }
+
+    if (!password) return reply.code(400).send({ error: 'password required' })
+
+    const db = getDb()
+    const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as ProfileRow | undefined
+    if (!profile) return reply.code(404).send({ error: 'Not found' })
+    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
+      return reply.code(403).send({ error: 'Forbidden' })
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
+    if (!(await verifyPassword(password, user.password_hash))) {
+      return reply.code(401).send({ error: 'Wrong password' })
+    }
+
+    if (pii) {
+      const salt = generateSalt()
+      const key  = await deriveKey(password, salt)
+      const blob = encrypt(JSON.stringify(pii), key, salt)
+      db.prepare('UPDATE profiles SET encrypted_pii = ?, label = COALESCE(?, label) WHERE id = ?')
+        .run(JSON.stringify(blob), label ?? null, id)
+    } else if (label) {
+      db.prepare('UPDATE profiles SET label = ? WHERE id = ?').run(label, id)
+    }
+
+    const updated = db.prepare('SELECT id, user_id, label, created_at FROM profiles WHERE id = ?').get(id) as ProfileRow
+    return reply.send(updated)
+  })
+
   app.delete('/profiles/:id', { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const db = getDb()

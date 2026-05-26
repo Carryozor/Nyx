@@ -36,6 +36,8 @@ export const api = {
     get:     (id: string) => req('GET', `/profiles/${id}`),
     decrypt: (id: string, password: string) =>
       req('POST', `/profiles/${id}/decrypt`, { password }),
+    update:  (id: string, password: string, pii: unknown, label?: string) =>
+      req('PATCH', `/profiles/${id}`, { password, pii, label }),
     delete:  (id: string) => req('DELETE', `/profiles/${id}`),
   },
 

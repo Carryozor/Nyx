@@ -34,15 +34,16 @@ export async function runBroker(
   let lastError = ''
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const browser = await chromium.launch({ headless: true })
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-    })
-    const page = await context.newPage()
-
-    emitEvent(db, jobId, 'progress', { broker: brokerId, attempt, phase: 'starting' })
-
+    let browser
     try {
+      browser = await chromium.launch({ headless: true })
+      const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+      })
+      const page = await context.newPage()
+
+      emitEvent(db, jobId, 'progress', { broker: brokerId, attempt, phase: 'starting' })
+
       const result = await Promise.race([
         script({ page, pii, screenshotDir, brokerId }),
         new Promise<OptOutResult>((_, reject) =>
@@ -65,12 +66,12 @@ export async function runBroker(
         profileId, brokerId,
       )
 
-      emitEvent(db, jobId, 'broker_done', { broker: brokerId, status: result.status, attempt })
+      emitEvent(db, jobId, 'broker_done', { broker: brokerId, status: result.status })
       return result
 
     } catch (err) {
       lastError = String(err)
-      await browser.close().catch(() => {})
+      await browser?.close().catch(() => {})
       if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, attempt * 2000))
     }
   }

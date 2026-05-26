@@ -15,6 +15,7 @@ export interface ProfilePII {
   firstName: string
   lastName: string
   dob: string
+  email?: string
   phone?: string
   aliases?: string[]
   currentAddress: Address
@@ -44,7 +45,7 @@ export interface OptOutRequest {
   id: string
   profile_id: string
   broker_id: string
-  status: 'pending' | 'submitted' | 'awaiting_email' | 'confirmed' | 'failed' | 'manual'
+  status: 'pending' | 'submitted' | 'awaiting_email' | 'confirmed' | 'failed' | 'manual' | 'already_removed'
   submitted_at: string | null
   confirmed_at: string | null
   last_attempt: string | null

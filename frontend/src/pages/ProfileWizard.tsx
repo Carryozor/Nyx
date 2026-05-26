@@ -27,6 +27,7 @@ export function ProfileWizard() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName]   = useState('')
   const [dob, setDob]             = useState('')
+  const [email, setEmail]         = useState('')
   const [phone, setPhone]         = useState('')
   const [alias, setAlias]         = useState('')
 
@@ -38,6 +39,7 @@ export function ProfileWizard() {
 
   const pii: ProfilePII = {
     firstName, lastName, dob,
+    email:   email || undefined,
     phone:   phone || undefined,
     aliases: alias ? [alias] : undefined,
     currentAddress: { street, city, state: state || undefined, zip: zip || undefined, country },
@@ -108,6 +110,11 @@ export function ProfileWizard() {
             <div className="grid grid-cols-2 gap-3">
               <div><label className={LABEL}>Date of birth *</label><input type="date" value={dob} onChange={e => setDob(e.target.value)} className={FIELD} required /></div>
               <div><label className={LABEL}>Phone (optional)</label><input type="tel" value={phone} onChange={e => setPhone(e.target.value)} className={FIELD} /></div>
+            </div>
+            <div>
+              <label className={LABEL}>Email for opt-out confirmations</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={FIELD} placeholder="confirmations@example.com" />
+              <p className="text-xs text-slate-500 mt-1">Used when submitting opt-out forms. Confirmation emails will be sent here.</p>
             </div>
             <div><label className={LABEL}>Alias / maiden name (optional)</label><input type="text" value={alias} onChange={e => setAlias(e.target.value)} className={FIELD} /></div>
           </div>

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.49.1-jammy AS builder
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY src/ ./src/
 
 RUN npm run build
 
-FROM mcr.microsoft.com/playwright:v1.49.1-jammy AS runtime
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy AS runtime
 
 WORKDIR /app
 
