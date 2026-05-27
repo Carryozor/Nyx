@@ -18,14 +18,20 @@ async function encryptKeyForWorker(piiKey: Buffer): Promise<string> {
 export function registerScanRoutes(app: FastifyInstance): void {
 
   app.post('/scans', { preHandler: requireAuth }, async (req, reply) => {
-    const { profileId, password, brokerIds } = req.body as {
+    const { profileId, password, brokerIds, email, aliasId } = req.body as {
       profileId:  string
       password:   string
       brokerIds?: string[]
+      email?:     string
+      aliasId?:   number | null
     }
 
     if (!profileId || !password) {
       return reply.code(400).send({ error: 'profileId and password required' })
+    }
+
+    if (brokerIds !== undefined && (!Array.isArray(brokerIds) || brokerIds.length > 100)) {
+      return reply.code(400).send({ error: 'brokerIds must be an array of at most 100 items' })
     }
 
     const db = getDb()
@@ -53,7 +59,7 @@ export function registerScanRoutes(app: FastifyInstance): void {
     const created_at = new Date().toISOString()
 
     db.prepare(
-      'INSERT INTO scan_jobs (id, profile_id, broker_ids, status, encrypted_job_key, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO scan_jobs (id, profile_id, broker_ids, status, encrypted_job_key, created_at, created_by, confirmation_email, simplelogin_alias_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       jobId, profileId,
       brokerIds ? JSON.stringify(brokerIds) : null,
@@ -61,6 +67,8 @@ export function registerScanRoutes(app: FastifyInstance): void {
       encryptedJobKey,
       created_at,
       req.user.id,
+      email ?? null,
+      aliasId ?? null,
     )
 
     const insertOpt = db.prepare(`
@@ -84,17 +92,35 @@ export function registerScanRoutes(app: FastifyInstance): void {
     const { id } = req.params as { id: string }
     const db = getDb()
     const job = db.prepare(
-      'SELECT id, profile_id, broker_ids, status, created_at, started_at, finished_at, created_by FROM scan_jobs WHERE id = ?'
-    ).get(id) as Omit<ScanJobRow, 'encrypted_job_key'> | undefined
+      'SELECT id, profile_id, broker_ids, status, confirmation_email, simplelogin_alias_id, created_at, started_at, finished_at, created_by FROM scan_jobs WHERE id = ?'
+    ).get(id) as (Omit<ScanJobRow, 'encrypted_job_key'> & { confirmation_email: string | null; simplelogin_alias_id: number | null }) | undefined
 
     if (!job) return reply.code(404).send({ error: 'Not found' })
 
-    const profile = db.prepare('SELECT user_id FROM profiles WHERE id = ?').get(job.profile_id) as { user_id: string }
+    const profile = db.prepare('SELECT user_id, label FROM profiles WHERE id = ?').get(job.profile_id) as { user_id: string; label: string }
     if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
       return reply.code(403).send({ error: 'Forbidden' })
     }
 
-    return reply.send(job)
+    // Include opt-out requests for this scan's brokers
+    const brokerIds: string[] | null = job.broker_ids ? JSON.parse(job.broker_ids) : null
+    const optOuts = brokerIds
+      ? db.prepare(`
+          SELECT oor.*, b.name as broker_name, b.type as broker_type, b.url as broker_url
+          FROM opt_out_requests oor
+          JOIN brokers b ON b.id = oor.broker_id
+          WHERE oor.profile_id = ? AND oor.broker_id IN (${brokerIds.map(() => '?').join(',')})
+          ORDER BY b.name
+        `).all(job.profile_id, ...brokerIds)
+      : db.prepare(`
+          SELECT oor.*, b.name as broker_name, b.type as broker_type, b.url as broker_url
+          FROM opt_out_requests oor
+          JOIN brokers b ON b.id = oor.broker_id
+          WHERE oor.profile_id = ?
+          ORDER BY b.name
+        `).all(job.profile_id)
+
+    return reply.send({ ...job, profile_label: profile.label, opt_outs: optOuts })
   })
 
   app.get('/scans', { preHandler: requireAuth }, async (req, reply) => {

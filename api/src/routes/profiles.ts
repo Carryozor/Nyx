@@ -1,11 +1,31 @@
 import type { FastifyInstance } from 'fastify'
 import { v4 as uuid } from 'uuid'
+import { z } from 'zod'
 import { getDb } from '../db/client.js'
 import { verifyPassword } from '../crypto/argon.js'
 import { deriveKey, generateSalt } from '../crypto/kdf.js'
 import { encrypt, decrypt } from '../crypto/aes.js'
 import { requireAuth } from '../auth/middleware.js'
 import type { UserRow, ProfileRow, ProfilePII } from '../types.js'
+
+const AddressSchema = z.object({
+  street:  z.string().min(1).max(200),
+  city:    z.string().min(1).max(100),
+  state:   z.string().max(50).optional(),
+  zip:     z.string().max(20).optional(),
+  country: z.string().length(2),
+})
+
+const PiiSchema = z.object({
+  firstName:         z.string().min(1).max(100),
+  lastName:          z.string().min(1).max(100),
+  dob:               z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dob must be YYYY-MM-DD'),
+  email:             z.string().email().optional().or(z.literal('')),
+  phone:             z.string().max(30).optional(),
+  aliases:           z.array(z.string().max(100)).max(10).optional(),
+  currentAddress:    AddressSchema,
+  previousAddresses: z.array(AddressSchema).max(5).optional(),
+})
 
 export function registerProfileRoutes(app: FastifyInstance): void {
 
@@ -28,6 +48,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: 'label, password and pii required' })
     }
 
+    const piiParsed = PiiSchema.safeParse(pii)
+    if (!piiParsed.success) {
+      return reply.code(400).send({ error: 'Invalid PII', details: piiParsed.error.flatten().fieldErrors })
+    }
+
     const db = getDb()
     if (req.user.role === 'user') {
       const count = (db.prepare('SELECT count(*) as n FROM profiles WHERE user_id = ?').get(req.user.id) as { n: number }).n
@@ -41,7 +66,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
 
     const salt       = generateSalt()
     const key        = await deriveKey(password, salt)
-    const blob       = encrypt(JSON.stringify(pii), key, salt)
+    const blob       = encrypt(JSON.stringify(piiParsed.data), key, salt)
     const id         = uuid()
     const created_at = new Date().toISOString()
 
@@ -114,9 +139,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     }
 
     if (pii) {
+      const piiParsed = PiiSchema.safeParse(pii)
+      if (!piiParsed.success) {
+        return reply.code(400).send({ error: 'Invalid PII', details: piiParsed.error.flatten().fieldErrors })
+      }
       const salt = generateSalt()
       const key  = await deriveKey(password, salt)
-      const blob = encrypt(JSON.stringify(pii), key, salt)
+      const blob = encrypt(JSON.stringify(piiParsed.data), key, salt)
       db.prepare('UPDATE profiles SET encrypted_pii = ?, label = COALESCE(?, label) WHERE id = ?')
         .run(JSON.stringify(blob), label ?? null, id)
     } else if (label) {
