@@ -21,44 +21,51 @@ async function checkSimpleLogin(
   apiKey: string,
 ): Promise<void> {
   try {
-    const response = await httpsGet(
-      'https://app.simplelogin.io/api/aliases?page_id=0',
-      { 'Authentication': apiKey }
-    )
-    const data = JSON.parse(response) as { aliases?: Array<{ id: number }> }
-
-    for (const alias of data.aliases ?? []) {
-      const emailsResp = await httpsGet(
-        `https://app.simplelogin.io/api/aliases/${alias.id}/activities`,
+    let page = 0
+    const MAX_PAGES = 20
+    while (page < MAX_PAGES) {
+      const response = await httpsGet(
+        `https://app.simplelogin.io/api/aliases?page_id=${page}`,
         { 'Authentication': apiKey }
-      ).catch(() => '{"activities":[]}')
+      ).catch(() => '{"aliases":[]}')
+      const data = JSON.parse(response) as { aliases?: Array<{ id: number }> }
+      const aliases = data.aliases ?? []
+      if (aliases.length === 0) break
 
-      const emails = JSON.parse(emailsResp) as { activities?: Array<{ from_: string; subject?: string }> }
+      for (const alias of aliases) {
+        const emailsResp = await httpsGet(
+          `https://app.simplelogin.io/api/aliases/${alias.id}/activities`,
+          { 'Authentication': apiKey }
+        ).catch(() => '{"activities":[]}')
 
-      const pending = db.prepare(`
-        SELECT oor.id, oor.confirmation_pattern, b.name as broker_name
-        FROM opt_out_requests oor
-        JOIN brokers b ON b.id = oor.broker_id
-        WHERE oor.profile_id = ? AND oor.status = 'awaiting_email'
-      `).all(profileId) as Array<{ id: string; broker_name: string; confirmation_pattern: string | null }>
+        const emails = JSON.parse(emailsResp) as { activities?: Array<{ from_: string; subject?: string }> }
 
-      for (const optOut of pending) {
-        let pat: RegExp
-        try {
-          pat = optOut.confirmation_pattern
-            ? new RegExp(optOut.confirmation_pattern, 'i')
-            : new RegExp(optOut.broker_name.toLowerCase().replace(/\s+/g, '.*'), 'i')
-        } catch {
-          pat = new RegExp(optOut.broker_name.toLowerCase().replace(/\s+/g, '.*'), 'i')
-        }
-        for (const activity of emails.activities ?? []) {
-          if (pat.test(activity.subject ?? '') || pat.test(activity.from_ ?? '')) {
-            db.prepare(`UPDATE opt_out_requests SET status='confirmed', confirmed_at=? WHERE id=?`)
-              .run(new Date().toISOString(), optOut.id)
-            console.log(`[email-checker] Confirmed: ${optOut.broker_name} for profile ${profileId}`)
+        const pending = db.prepare(`
+          SELECT oor.id, oor.confirmation_pattern, b.name as broker_name
+          FROM opt_out_requests oor
+          JOIN brokers b ON b.id = oor.broker_id
+          WHERE oor.profile_id = ? AND oor.status = 'awaiting_email'
+        `).all(profileId) as Array<{ id: string; broker_name: string; confirmation_pattern: string | null }>
+
+        for (const optOut of pending) {
+          let pat: RegExp
+          try {
+            pat = optOut.confirmation_pattern
+              ? new RegExp(optOut.confirmation_pattern, 'i')
+              : new RegExp(optOut.broker_name.toLowerCase().replace(/\s+/g, '.*'), 'i')
+          } catch {
+            pat = new RegExp(optOut.broker_name.toLowerCase().replace(/\s+/g, '.*'), 'i')
+          }
+          for (const activity of emails.activities ?? []) {
+            if (pat.test(activity.subject ?? '') || pat.test(activity.from_ ?? '')) {
+              db.prepare(`UPDATE opt_out_requests SET status='confirmed', confirmed_at=? WHERE id=?`)
+                .run(new Date().toISOString(), optOut.id)
+              console.log(`[email-checker] Confirmed: ${optOut.broker_name} for profile ${profileId}`)
+            }
           }
         }
       }
+      page++
     }
   } catch (err) {
     console.error('[email-checker] SimpleLogin error:', err)
@@ -69,14 +76,18 @@ export function startEmailChecker(db: Database.Database): void {
   const check = async () => {
     try {
       const configs = db.prepare(`
-        SELECT ec.*, ss.encrypted_schedule_key
+        SELECT ec.profile_id, ec.encrypted_credentials, sj.encrypted_job_key
         FROM email_configs ec
-        LEFT JOIN scan_schedules ss ON ss.profile_id = ec.profile_id
-        WHERE ec.provider = 'simplelogin' AND ss.encrypted_schedule_key IS NOT NULL
-      `).all() as Array<{ profile_id: string; encrypted_credentials: string; encrypted_schedule_key: string }>
+        JOIN scan_jobs sj ON sj.id = (
+          SELECT id FROM scan_jobs
+          WHERE profile_id = ec.profile_id AND status = 'done'
+          ORDER BY created_at DESC LIMIT 1
+        )
+        WHERE ec.provider = 'simplelogin'
+      `).all() as Array<{ profile_id: string; encrypted_credentials: string; encrypted_job_key: string }>
 
       for (const cfg of configs) {
-        const piiKey = decryptJobKey(cfg.encrypted_schedule_key, config.WORKER_SECRET)
+        const piiKey = decryptJobKey(cfg.encrypted_job_key, config.WORKER_SECRET)
         const credBlob: EncryptedBlob = JSON.parse(cfg.encrypted_credentials)
         const credentials = JSON.parse(decrypt(credBlob, piiKey)) as Record<string, string>
         if (credentials.apiKey) {
