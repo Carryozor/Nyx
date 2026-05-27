@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { v4 as uuid } from 'uuid'
+import { config } from '../config.js'
 import { getDb } from '../db/client.js'
 import { hashPassword, verifyPassword } from '../crypto/argon.js'
 import { signToken } from './jwt.js'
@@ -85,7 +86,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       .setCookie('nyx_session', token, {
         httpOnly: true,
         sameSite: 'strict',
-        secure:   false,
+        secure:   config.COOKIE_SECURE,
         path:     '/',
         maxAge:   8 * 3600,
       })

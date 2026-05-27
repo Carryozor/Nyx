@@ -7,6 +7,7 @@ const schema = z.object({
   PORT:          z.coerce.number().default(3000),
   NODE_ENV:      z.enum(['development', 'production', 'test']).default('development'),
   FRONTEND_DIST: z.string().default('../frontend/dist'),
+  COOKIE_SECURE: z.coerce.boolean().default(false),
 })
 
 const parsed = schema.safeParse(process.env)
