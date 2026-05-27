@@ -30,8 +30,8 @@ export function registerScanRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: 'profileId and password required' })
     }
 
-    if (brokerIds !== undefined && (!Array.isArray(brokerIds) || brokerIds.length > 100)) {
-      return reply.code(400).send({ error: 'brokerIds must be an array of at most 100 items' })
+    if (brokerIds !== undefined && (!Array.isArray(brokerIds) || brokerIds.length === 0 || brokerIds.length > 100)) {
+      return reply.code(400).send({ error: 'brokerIds must be a non-empty array of at most 100 items' })
     }
 
     const db = getDb()
@@ -62,7 +62,7 @@ export function registerScanRoutes(app: FastifyInstance): void {
       'INSERT INTO scan_jobs (id, profile_id, broker_ids, status, encrypted_job_key, created_at, created_by, confirmation_email, simplelogin_alias_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       jobId, profileId,
-      brokerIds ? JSON.stringify(brokerIds) : null,
+      brokerIds?.length ? JSON.stringify(brokerIds) : null,
       'queued',
       encryptedJobKey,
       created_at,

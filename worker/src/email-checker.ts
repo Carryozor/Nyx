@@ -21,6 +21,15 @@ async function checkSimpleLogin(
   apiKey: string,
 ): Promise<void> {
   try {
+    const pending = db.prepare(`
+      SELECT oor.id, oor.confirmation_pattern, b.name as broker_name
+      FROM opt_out_requests oor
+      JOIN brokers b ON b.id = oor.broker_id
+      WHERE oor.profile_id = ? AND oor.status = 'awaiting_email'
+    `).all(profileId) as Array<{ id: string; broker_name: string; confirmation_pattern: string | null }>
+
+    if (pending.length === 0) return
+
     let page = 0
     const MAX_PAGES = 20
     while (page < MAX_PAGES) {
@@ -39,13 +48,6 @@ async function checkSimpleLogin(
         ).catch(() => '{"activities":[]}')
 
         const emails = JSON.parse(emailsResp) as { activities?: Array<{ from_: string; subject?: string }> }
-
-        const pending = db.prepare(`
-          SELECT oor.id, oor.confirmation_pattern, b.name as broker_name
-          FROM opt_out_requests oor
-          JOIN brokers b ON b.id = oor.broker_id
-          WHERE oor.profile_id = ? AND oor.status = 'awaiting_email'
-        `).all(profileId) as Array<{ id: string; broker_name: string; confirmation_pattern: string | null }>
 
         for (const optOut of pending) {
           let pat: RegExp
