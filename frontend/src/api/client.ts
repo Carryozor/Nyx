@@ -1,3 +1,5 @@
+import type { ScanJob } from '../types.js'
+
 class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message)
@@ -39,6 +41,7 @@ export const api = {
     update:  (id: string, password: string, pii: unknown, label?: string) =>
       req('PATCH', `/profiles/${id}`, { password, pii, label }),
     delete:  (id: string) => req('DELETE', `/profiles/${id}`),
+    scans:   (id: string) => req<ScanJob[]>('GET', `/profiles/${id}/scans`),
   },
 
   // Brokers
@@ -55,10 +58,22 @@ export const api = {
 
   // Scans
   scans: {
-    create: (profileId: string, password: string) =>
-      req('POST', '/scans', { profileId, password }),
+    create: (profileId: string, password: string, email?: string, aliasId?: number | null) =>
+      req('POST', '/scans', { profileId, password, email, aliasId }),
     list:   () => req('GET', '/scans'),
     get:    (id: string) => req('GET', `/scans/${id}`),
+  },
+
+  // SimpleLogin alias proxy
+  simplelogin: {
+    createAlias: (apiKey: string, note: string) =>
+      req<{ alias: string; aliasId: number | null }>('POST', '/simplelogin/alias', { apiKey, note }),
+    deleteAlias: (apiKey: string, aliasId: number) =>
+      req('DELETE', `/simplelogin/alias/${aliasId}`, { apiKey }),
+    listNyxAliases: (apiKey: string) =>
+      req<{ aliases: { id: number; alias: string }[] }>('POST', '/simplelogin/aliases/nyx', { apiKey }),
+    purgeAliases: (apiKey: string, aliasIds: number[]) =>
+      req<{ deleted: number }>('POST', '/simplelogin/aliases/purge', { apiKey, aliasIds }),
   },
 
   // Invitations

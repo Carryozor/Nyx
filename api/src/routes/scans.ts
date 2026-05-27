@@ -123,6 +123,28 @@ export function registerScanRoutes(app: FastifyInstance): void {
     return reply.send({ ...job, profile_label: profile.label, opt_outs: optOuts })
   })
 
+  app.get('/profiles/:id/scans', { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const db = getDb()
+
+    const profile = db.prepare('SELECT user_id FROM profiles WHERE id = ?').get(id) as { user_id: string } | undefined
+    if (!profile) return reply.code(404).send({ error: 'Profile not found' })
+    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
+      return reply.code(403).send({ error: 'Forbidden' })
+    }
+
+    const jobs = db.prepare(`
+      SELECT id, profile_id, status, confirmation_email, simplelogin_alias_id,
+             created_at, started_at, finished_at
+      FROM scan_jobs
+      WHERE profile_id = ?
+      ORDER BY created_at DESC
+      LIMIT 20
+    `).all(id) as ScanJobRow[]
+
+    return reply.send(jobs)
+  })
+
   app.get('/scans', { preHandler: requireAuth }, async (req, reply) => {
     const db = getDb()
     const base = req.user.role === 'admin'
