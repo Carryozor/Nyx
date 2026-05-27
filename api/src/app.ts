@@ -30,16 +30,25 @@ export async function buildApp(): Promise<FastifyInstance> {
   const { registerEmailConfigRoutes } = await import('./routes/email-configs.js')
   const { registerScheduleRoutes }    = await import('./routes/schedules.js')
   const { registerWsRoutes }          = await import('./routes/ws.js')
+  const { registerSimpleLoginRoutes } = await import('./routes/simplelogin.js')
 
-  registerAuthRoutes(app)
-  registerProfileRoutes(app)
-  registerInvitationRoutes(app)
-  registerBrokerRoutes(app)
-  registerScanRoutes(app)
-  registerOptOutRoutes(app)
-  registerEmailConfigRoutes(app)
-  registerScheduleRoutes(app)
+  app.get('/health', async () => ({ status: 'ok', version: '1.0.0' }))
+
+  // WebSocket stays at /ws (browser connects via window.location.host + '/ws')
   registerWsRoutes(app)
+
+  // All REST API routes under /api so /profiles/:id etc. don't shadow SPA routes
+  await app.register(async (api) => {
+    registerAuthRoutes(api)
+    registerProfileRoutes(api)
+    registerInvitationRoutes(api)
+    registerBrokerRoutes(api)
+    registerScanRoutes(api)
+    registerOptOutRoutes(api)
+    registerEmailConfigRoutes(api)
+    registerScheduleRoutes(api)
+    registerSimpleLoginRoutes(api)
+  }, { prefix: '/api' })
 
   if (config.NODE_ENV === 'production') {
     const { default: fastifyStatic } = await import('@fastify/static')

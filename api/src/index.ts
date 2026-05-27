@@ -8,8 +8,6 @@ runMigrations()
 
 const app = await buildApp()
 
-app.get('/health', async () => ({ status: 'ok', version: '1.0.0' }))
-
 await app.listen({ port: config.PORT, host: '0.0.0.0' })
 console.log(`[nyx-api] listening on :${config.PORT}`)
 
