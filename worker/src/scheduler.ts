@@ -1,6 +1,8 @@
 import { v4 as uuid } from 'uuid'
 import type Database from 'better-sqlite3'
 
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000'
+
 interface ScheduleRow {
   id: string
   profile_id: string
@@ -20,8 +22,8 @@ export function runDueSchedules(db: Database.Database): void {
     const jobId = uuid()
     db.prepare(`
       INSERT INTO scan_jobs (id, profile_id, broker_ids, status, encrypted_job_key, created_at, created_by)
-      VALUES (?, ?, NULL, 'queued', ?, ?, 'scheduler')
-    `).run(jobId, sched.profile_id, sched.encrypted_schedule_key, now)
+      VALUES (?, ?, NULL, 'queued', ?, ?, ?)
+    `).run(jobId, sched.profile_id, sched.encrypted_schedule_key, now, SYSTEM_USER_ID)
 
     const nextRun = new Date(Date.now() + sched.interval_days * 86400 * 1000).toISOString()
     db.prepare(`UPDATE scan_schedules SET next_run=?, last_run=? WHERE id=?`)
