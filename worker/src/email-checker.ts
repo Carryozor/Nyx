@@ -36,15 +36,18 @@ async function checkSimpleLogin(
       const emails = JSON.parse(emailsResp) as { activities?: Array<{ from_: string; subject?: string }> }
 
       const pending = db.prepare(`
-        SELECT oor.*, b.name as broker_name FROM opt_out_requests oor
+        SELECT oor.id, oor.confirmation_pattern, b.name as broker_name
+        FROM opt_out_requests oor
         JOIN brokers b ON b.id = oor.broker_id
         WHERE oor.profile_id = ? AND oor.status = 'awaiting_email'
-      `).all(profileId) as Array<{ id: string; broker_name: string }>
+      `).all(profileId) as Array<{ id: string; broker_name: string; confirmation_pattern: string | null }>
 
       for (const optOut of pending) {
-        const pattern = new RegExp(optOut.broker_name.toLowerCase().replace(/\s/g, '.*'), 'i')
+        const pat = optOut.confirmation_pattern
+          ? new RegExp(optOut.confirmation_pattern, 'i')
+          : new RegExp(optOut.broker_name.toLowerCase().replace(/\s+/g, '.*'), 'i')
         for (const activity of emails.activities ?? []) {
-          if (pattern.test(activity.subject ?? '') || pattern.test(activity.from_ ?? '')) {
+          if (pat.test(activity.subject ?? '') || pat.test(activity.from_ ?? '')) {
             db.prepare(`UPDATE opt_out_requests SET status='confirmed', confirmed_at=? WHERE id=?`)
               .run(new Date().toISOString(), optOut.id)
             console.log(`[email-checker] Confirmed: ${optOut.broker_name} for profile ${profileId}`)
