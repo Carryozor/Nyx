@@ -43,9 +43,14 @@ async function checkSimpleLogin(
       `).all(profileId) as Array<{ id: string; broker_name: string; confirmation_pattern: string | null }>
 
       for (const optOut of pending) {
-        const pat = optOut.confirmation_pattern
-          ? new RegExp(optOut.confirmation_pattern, 'i')
-          : new RegExp(optOut.broker_name.toLowerCase().replace(/\s+/g, '.*'), 'i')
+        let pat: RegExp
+        try {
+          pat = optOut.confirmation_pattern
+            ? new RegExp(optOut.confirmation_pattern, 'i')
+            : new RegExp(optOut.broker_name.toLowerCase().replace(/\s+/g, '.*'), 'i')
+        } catch {
+          pat = new RegExp(optOut.broker_name.toLowerCase().replace(/\s+/g, '.*'), 'i')
+        }
         for (const activity of emails.activities ?? []) {
           if (pat.test(activity.subject ?? '') || pat.test(activity.from_ ?? '')) {
             db.prepare(`UPDATE opt_out_requests SET status='confirmed', confirmed_at=? WHERE id=?`)

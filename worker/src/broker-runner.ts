@@ -66,7 +66,7 @@ export async function runBroker(
 
       await browser.close()
 
-      const confirmPattern = result.status === 'awaiting_email' ? result.confirmationPattern : null
+      const confirmationPattern = result.status === 'awaiting_email' ? result.confirmationPattern : null
       const notes = 'reason' in result ? result.reason : null
 
       db.prepare(`
@@ -80,7 +80,7 @@ export async function runBroker(
         result.status, new Date().toISOString(),
         result.status, new Date().toISOString(),
         notes,
-        confirmPattern,
+        confirmationPattern,
         profileId, brokerId,
       )
 
