@@ -87,11 +87,15 @@ export function startEmailChecker(db: Database.Database): void {
       `).all() as Array<{ profile_id: string; encrypted_credentials: string; encrypted_job_key: string }>
 
       for (const cfg of configs) {
-        const piiKey = decryptJobKey(cfg.encrypted_job_key, config.WORKER_SECRET)
-        const credBlob: EncryptedBlob = JSON.parse(cfg.encrypted_credentials)
-        const credentials = JSON.parse(decrypt(credBlob, piiKey)) as Record<string, string>
-        if (credentials.apiKey) {
-          await checkSimpleLogin(db, cfg.profile_id, credentials.apiKey)
+        try {
+          const piiKey = decryptJobKey(cfg.encrypted_job_key, config.WORKER_SECRET)
+          const credBlob: EncryptedBlob = JSON.parse(cfg.encrypted_credentials)
+          const credentials = JSON.parse(decrypt(credBlob, piiKey)) as Record<string, string>
+          if (credentials.apiKey) {
+            await checkSimpleLogin(db, cfg.profile_id, credentials.apiKey)
+          }
+        } catch (err) {
+          console.error(`[email-checker] Failed to process profile ${cfg.profile_id}:`, err)
         }
       }
     } catch (err) {
