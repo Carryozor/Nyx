@@ -9,11 +9,17 @@ import type { DecryptedPII, OptOutResult } from './scripts/_types.js'
 
 chromium.use(StealthPlugin())
 
+const SCRIPT_FILE_RE = /^[a-z0-9_-]+\.js$/i
 const SCRIPT_DIR = new URL('./scripts/', import.meta.url).pathname
 const TIMEOUT_MS = 60_000
 const MAX_RETRIES = 3
 
 async function loadScript(scriptFile: string) {
+  if (!SCRIPT_FILE_RE.test(scriptFile)) {
+    console.error(`[broker-runner] blocked unsafe script_file: ${scriptFile}`)
+    const stub = await import('./scripts/_stub.js') as { run: (ctx: unknown) => Promise<OptOutResult> }
+    return stub.run
+  }
   const scriptPath = path.join(SCRIPT_DIR, scriptFile)
   if (fs.existsSync(scriptPath)) {
     const mod = await import(scriptPath) as { run: (ctx: unknown) => Promise<OptOutResult> }
