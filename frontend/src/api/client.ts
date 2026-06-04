@@ -54,6 +54,8 @@ export const api = {
   optOuts: {
     forProfile: (profileId: string) => req('GET', `/profiles/${profileId}/opt-outs`),
     get:        (id: string) => req('GET', `/opt-outs/${id}`),
+    screenshots: (id: string) =>
+      req<{ filename: string; url: string }[]>('GET', `/opt-outs/${id}/screenshots`),
   },
 
   // Scans

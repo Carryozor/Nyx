@@ -51,6 +51,9 @@ export interface OptOutRequest {
   last_attempt: string | null
   attempts: number
   notes: string | null
+  screenshot: string | null
+  confirmation_pattern: string | null
+  manual_guide: string | null
   broker_name?: string
   broker_type?: string
   broker_url?: string
@@ -69,10 +72,14 @@ export interface ScanJob {
   profile_id: string
   status: 'queued' | 'running' | 'done' | 'failed'
   broker_count?: number
+  confirmation_email?: string | null
+  simplelogin_alias_id?: number | null
+  profile_label?: string
   created_at: string
   started_at: string | null
   finished_at: string | null
   stats?: ScanJobStats | null
+  opt_outs?: OptOutRequest[]
 }
 
 export interface Invitation {
@@ -93,7 +100,7 @@ export interface ScanSchedule {
 
 export type ScanEventPayload =
   | { type: 'progress'; jobId: string; payload: { broker: string; attempt: number; phase: string } }
-  | { type: 'broker_done'; jobId: string; payload: { broker: string; status: string } }
+  | { type: 'broker_done'; jobId: string; payload: { broker: string; status: string; notes?: string | null } }
   | { type: 'complete'; jobId: string; payload: { jobId: string; brokerCount: number } }
   | { type: 'auth:ok'; userId: string }
   | { type: 'auth:error'; error: string }
