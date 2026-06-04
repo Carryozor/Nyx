@@ -7,6 +7,8 @@ import { signToken } from './jwt.js'
 import { requireAuth } from './middleware.js'
 import type { UserRow, InvitationRow } from '../types.js'
 
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000'
+
 export function registerAuthRoutes(app: FastifyInstance): void {
 
   app.get('/auth/setup', async (_req, reply) => {
@@ -31,8 +33,8 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     if (existing) return reply.code(409).send({ error: 'Email already registered' })
 
     const userCount = (db.prepare(
-      "SELECT count(*) as n FROM users WHERE id != '00000000-0000-0000-0000-000000000000'"
-    ).get() as { n: number }).n
+      'SELECT count(*) as n FROM users WHERE id != ?'
+    ).get(SYSTEM_USER_ID) as { n: number }).n
 
     let role: 'admin' | 'user' = 'user'
     let invitedBy: string | null = null
@@ -43,28 +45,35 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       if (!invitationToken) {
         return reply.code(403).send({ error: 'Invitation required' })
       }
-      // Atomically consume the invitation — returns 0 changes if already used/expired/wrong email
-      const now = new Date().toISOString()
-      const consumed = db.prepare(
-        'UPDATE invitations SET used_at = ? WHERE token = ? AND used_at IS NULL AND expires_at > ? AND email = ?'
-      ).run(now, invitationToken, now, email)
-
-      if (consumed.changes === 0) {
-        return reply.code(403).send({ error: 'Invalid, expired or already used invitation' })
-      }
-
-      const inv = db.prepare('SELECT created_by FROM invitations WHERE token = ?')
-        .get(invitationToken) as { created_by: string } | undefined
-      invitedBy = inv?.created_by ?? null
     }
 
     const id            = uuid()
     const password_hash = await hashPassword(password)
     const created_at    = new Date().toISOString()
 
-    db.prepare(
-      'INSERT INTO users (id, email, password_hash, role, created_at, invited_by) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(id, email, password_hash, role, created_at, invitedBy)
+    if (role === 'user') {
+      // Wrap invitation consume + user insert in one transaction
+      const registerWithInvitation = db.transaction(() => {
+        const now = new Date().toISOString()
+        const consumed = db.prepare(
+          'UPDATE invitations SET used_at = ? WHERE token = ? AND used_at IS NULL AND expires_at > ? AND email = ?'
+        ).run(now, invitationToken!, now, email)
+        if (consumed.changes === 0) return false
+        const inv2 = db.prepare('SELECT created_by FROM invitations WHERE token = ?')
+          .get(invitationToken) as { created_by: string } | undefined
+        invitedBy = inv2?.created_by ?? null
+        db.prepare(
+          'INSERT INTO users (id, email, password_hash, role, created_at, invited_by) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(id, email, password_hash, role, created_at, invitedBy)
+        return true
+      })
+      const ok = registerWithInvitation()
+      if (!ok) return reply.code(403).send({ error: 'Invalid, expired or already used invitation' })
+    } else {
+      db.prepare(
+        'INSERT INTO users (id, email, password_hash, role, created_at, invited_by) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(id, email, password_hash, role, created_at, null)
+    }
 
     return reply.code(201).send({ id, email, role, created_at })
   })

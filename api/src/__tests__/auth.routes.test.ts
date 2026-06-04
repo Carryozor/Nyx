@@ -120,11 +120,11 @@ describe('POST /auth/register — invitation atomicity', () => {
         payload: { email: 'user@nyx.local', password: 'Pass1234!', invitationToken: token } }),
     ])
 
-    // At most one succeeds
     const successes = [r1, r2].filter(r => r.statusCode === 201)
-    expect(successes.length).toBeLessThanOrEqual(1)
-    // The other must fail (403 or 409)
-    const failures = [r1, r2].filter(r => r.statusCode >= 400)
-    expect(failures.length).toBeGreaterThanOrEqual(1)
+    const failures   = [r1, r2].filter(r => r.statusCode >= 400)
+    // Exactly one must succeed and one must fail
+    expect(successes.length).toBe(1)
+    expect(failures.length).toBe(1)
+    expect([403, 409]).toContain(failures[0].statusCode)
   })
 })
