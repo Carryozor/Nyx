@@ -3,6 +3,7 @@ import fastifyCookie from '@fastify/cookie'
 import fastifyCors   from '@fastify/cors'
 import fastifyRateLimit from '@fastify/rate-limit'
 import fastifyWebsocket from '@fastify/websocket'
+import fastifyHelmet from '@fastify/helmet'
 import { config } from './config.js'
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -11,6 +12,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   })
 
   await app.register(fastifyCookie)
+  await app.register(fastifyHelmet, {
+    contentSecurityPolicy: false,  // SPA with inline Vite scripts — configure separately if needed
+  })
   await app.register(fastifyCors, {
     origin:      config.NODE_ENV === 'production' ? false : true,
     credentials: true,
