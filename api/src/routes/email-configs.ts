@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { v4 as uuid } from 'uuid'
+import { z } from 'zod'
 import { getDb } from '../db/client.js'
 import { verifyPassword } from '../crypto/argon.js'
 import { deriveKey } from '../crypto/kdf.js'
@@ -7,15 +8,21 @@ import { encrypt } from '../crypto/aes.js'
 import { requireAuth } from '../auth/middleware.js'
 import type { UserRow, ProfileRow, EmailConfigRow } from '../types.js'
 
+const emailConfigSchema = z.object({
+  password:    z.string().min(1),
+  provider:    z.enum(['simplelogin', 'gmail']),
+  credentials: z.record(z.string(), z.string()),
+})
+
 export function registerEmailConfigRoutes(app: FastifyInstance): void {
 
   app.post('/profiles/:id/email-config', { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const { password, provider, credentials } = req.body as {
-      password:    string
-      provider:    'simplelogin' | 'gmail'
-      credentials: Record<string, string>
+    const bodyParsed = emailConfigSchema.safeParse(req.body)
+    if (!bodyParsed.success) {
+      return reply.code(400).send({ error: bodyParsed.error.issues[0]?.message ?? 'Invalid request body' })
     }
+    const { password, provider, credentials } = bodyParsed.data
 
     const db      = getDb()
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as ProfileRow | undefined

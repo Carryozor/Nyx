@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { v4 as uuid } from 'uuid'
+import { z } from 'zod'
 import { getDb } from '../db/client.js'
 import { config } from '../config.js'
 import { verifyPassword } from '../crypto/argon.js'
@@ -8,24 +9,22 @@ import { encryptJobKey } from '../crypto/aes.js'
 import { requireAuth } from '../auth/middleware.js'
 import type { UserRow, ProfileRow, ScanJobRow, BrokerRow } from '../types.js'
 
+const createScanSchema = z.object({
+  profileId:  z.string().uuid(),
+  password:   z.string().min(1),
+  brokerIds:  z.array(z.string()).min(1).max(100).optional(),
+  email:      z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
+  aliasId:    z.number().int().positive().nullable().optional(),
+})
+
 export function registerScanRoutes(app: FastifyInstance): void {
 
   app.post('/scans', { preHandler: requireAuth }, async (req, reply) => {
-    const { profileId, password, brokerIds, email, aliasId } = req.body as {
-      profileId:  string
-      password:   string
-      brokerIds?: string[]
-      email?:     string
-      aliasId?:   number | null
+    const bodyParsed = createScanSchema.safeParse(req.body)
+    if (!bodyParsed.success) {
+      return reply.code(400).send({ error: bodyParsed.error.issues[0]?.message ?? 'Invalid request body' })
     }
-
-    if (!profileId || !password) {
-      return reply.code(400).send({ error: 'profileId and password required' })
-    }
-
-    if (brokerIds !== undefined && (!Array.isArray(brokerIds) || brokerIds.length === 0 || brokerIds.length > 100)) {
-      return reply.code(400).send({ error: 'brokerIds must be a non-empty array of at most 100 items' })
-    }
+    const { profileId, password, brokerIds, email, aliasId } = bodyParsed.data
 
     const db = getDb()
 
