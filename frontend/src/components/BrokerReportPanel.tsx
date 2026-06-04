@@ -28,6 +28,13 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
+function safeUrl(url: string): string | undefined {
+  try {
+    const { protocol } = new URL(url)
+    return ['http:', 'https:'].includes(protocol) ? url : undefined
+  } catch { return undefined }
+}
+
 function fmt(date: string | null): string {
   if (!date) return '—'
   return new Date(date).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
@@ -64,9 +71,9 @@ export function BrokerReportPanel({ optOut, onClose }: BrokerReportPanelProps) {
           <h2 className="text-base font-semibold text-white truncate">
             {optOut.broker_name ?? optOut.broker_id}
           </h2>
-          {optOut.broker_url && (
+          {optOut.broker_url && safeUrl(optOut.broker_url) && (
             <a
-              href={optOut.broker_url}
+              href={safeUrl(optOut.broker_url)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] text-violet-400 hover:underline truncate block mt-0.5"
