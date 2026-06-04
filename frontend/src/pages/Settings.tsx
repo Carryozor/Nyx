@@ -105,7 +105,7 @@ export function Settings() {
     setSlTest('loading')
     setSlTestMsg('')
     try {
-      const res = await fetch('/simplelogin/alias', {
+      const res = await fetch('/api/simplelogin/alias', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
