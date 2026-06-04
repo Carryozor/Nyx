@@ -31,6 +31,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const { registerScheduleRoutes }    = await import('./routes/schedules.js')
   const { registerWsRoutes }          = await import('./routes/ws.js')
   const { registerSimpleLoginRoutes } = await import('./routes/simplelogin.js')
+  const { registerScreenshotRoutes }  = await import('./routes/screenshots.js')
 
   app.get('/health', async () => ({ status: 'ok', version: '1.0.0' }))
 
@@ -48,6 +49,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     registerEmailConfigRoutes(api)
     registerScheduleRoutes(api)
     registerSimpleLoginRoutes(api)
+    registerScreenshotRoutes(api)
   }, { prefix: '/api' })
 
   if (config.NODE_ENV === 'production') {
