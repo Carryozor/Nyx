@@ -30,7 +30,9 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
     if (existing) return reply.code(409).send({ error: 'Email already registered' })
 
-    const userCount = (db.prepare('SELECT count(*) as n FROM users').get() as { n: number }).n
+    const userCount = (db.prepare(
+      "SELECT count(*) as n FROM users WHERE id != '00000000-0000-0000-0000-000000000000'"
+    ).get() as { n: number }).n
 
     let role: 'admin' | 'user' = 'user'
     let invitedBy: string | null = null
@@ -41,16 +43,19 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       if (!invitationToken) {
         return reply.code(403).send({ error: 'Invitation required' })
       }
-      const inv = db.prepare(
-        'SELECT * FROM invitations WHERE token = ? AND used_at IS NULL AND expires_at > ?'
-      ).get(invitationToken, new Date().toISOString()) as InvitationRow | undefined
+      // Atomically consume the invitation — returns 0 changes if already used/expired/wrong email
+      const now = new Date().toISOString()
+      const consumed = db.prepare(
+        'UPDATE invitations SET used_at = ? WHERE token = ? AND used_at IS NULL AND expires_at > ? AND email = ?'
+      ).run(now, invitationToken, now, email)
 
-      if (!inv) return reply.code(403).send({ error: 'Invalid or expired invitation' })
-      if (inv.email !== email) return reply.code(403).send({ error: 'Invitation email mismatch' })
+      if (consumed.changes === 0) {
+        return reply.code(403).send({ error: 'Invalid, expired or already used invitation' })
+      }
 
-      invitedBy = inv.created_by
-      db.prepare('UPDATE invitations SET used_at = ? WHERE token = ?')
-        .run(new Date().toISOString(), invitationToken)
+      const inv = db.prepare('SELECT created_by FROM invitations WHERE token = ?')
+        .get(invitationToken) as { created_by: string } | undefined
+      invitedBy = inv?.created_by ?? null
     }
 
     const id            = uuid()

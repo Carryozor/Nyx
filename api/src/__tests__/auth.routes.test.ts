@@ -25,7 +25,7 @@ describe('POST /auth/register', () => {
   it('creates the first user as admin', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/auth/register',
+      url: '/api/auth/register',
       payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
     })
     expect(res.statusCode).toBe(201)
@@ -36,11 +36,11 @@ describe('POST /auth/register', () => {
 
   it('rejects a second registration without invitation', async () => {
     await app.inject({
-      method: 'POST', url: '/auth/register',
+      method: 'POST', url: '/api/auth/register',
       payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
     })
     const res = await app.inject({
-      method: 'POST', url: '/auth/register',
+      method: 'POST', url: '/api/auth/register',
       payload: { email: 'user2@nyx.local', password: 'AnotherPass1!' },
     })
     expect(res.statusCode).toBe(403)
@@ -50,11 +50,11 @@ describe('POST /auth/register', () => {
 describe('POST /auth/login', () => {
   it('returns 200 and sets nyx_session cookie', async () => {
     await app.inject({
-      method: 'POST', url: '/auth/register',
+      method: 'POST', url: '/api/auth/register',
       payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
     })
     const res = await app.inject({
-      method: 'POST', url: '/auth/login',
+      method: 'POST', url: '/api/auth/login',
       payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
     })
     expect(res.statusCode).toBe(200)
@@ -63,11 +63,11 @@ describe('POST /auth/login', () => {
 
   it('returns 401 on wrong password', async () => {
     await app.inject({
-      method: 'POST', url: '/auth/register',
+      method: 'POST', url: '/api/auth/register',
       payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
     })
     const res = await app.inject({
-      method: 'POST', url: '/auth/login',
+      method: 'POST', url: '/api/auth/login',
       payload: { email: 'admin@nyx.local', password: 'wrong' },
     })
     expect(res.statusCode).toBe(401)
@@ -76,26 +76,55 @@ describe('POST /auth/login', () => {
 
 describe('GET /auth/me', () => {
   it('returns 401 without cookie', async () => {
-    const res = await app.inject({ method: 'GET', url: '/auth/me' })
+    const res = await app.inject({ method: 'GET', url: '/api/auth/me' })
     expect(res.statusCode).toBe(401)
   })
 
   it('returns current user with valid cookie', async () => {
     await app.inject({
-      method: 'POST', url: '/auth/register',
+      method: 'POST', url: '/api/auth/register',
       payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
     })
     const loginRes = await app.inject({
-      method: 'POST', url: '/auth/login',
+      method: 'POST', url: '/api/auth/login',
       payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
     })
     const cookie = loginRes.cookies.find(c => c.name === 'nyx_session')!
 
     const meRes = await app.inject({
-      method: 'GET', url: '/auth/me',
+      method: 'GET', url: '/api/auth/me',
       cookies: { nyx_session: cookie.value },
     })
     expect(meRes.statusCode).toBe(200)
     expect(meRes.json().email).toBe('admin@nyx.local')
+  })
+})
+
+describe('POST /auth/register — invitation atomicity', () => {
+  it('cannot reuse the same invitation token in concurrent requests', async () => {
+    await app.inject({ method: 'POST', url: '/api/auth/register',
+      payload: { email: 'admin@nyx.local', password: 'StrongPass1!' } })
+    const adminLogin = await app.inject({ method: 'POST', url: '/api/auth/login',
+      payload: { email: 'admin@nyx.local', password: 'StrongPass1!' } })
+    const adminCookie = adminLogin.cookies.find(c => c.name === 'nyx_session')!.value
+
+    const invRes = await app.inject({ method: 'POST', url: '/api/invitations',
+      cookies: { nyx_session: adminCookie },
+      payload: { email: 'user@nyx.local' } })
+    const { token } = invRes.json()
+
+    const [r1, r2] = await Promise.all([
+      app.inject({ method: 'POST', url: '/api/auth/register',
+        payload: { email: 'user@nyx.local', password: 'Pass1234!', invitationToken: token } }),
+      app.inject({ method: 'POST', url: '/api/auth/register',
+        payload: { email: 'user@nyx.local', password: 'Pass1234!', invitationToken: token } }),
+    ])
+
+    // At most one succeeds
+    const successes = [r1, r2].filter(r => r.statusCode === 201)
+    expect(successes.length).toBeLessThanOrEqual(1)
+    // The other must fail (403 or 409)
+    const failures = [r1, r2].filter(r => r.statusCode >= 400)
+    expect(failures.length).toBeGreaterThanOrEqual(1)
   })
 })
