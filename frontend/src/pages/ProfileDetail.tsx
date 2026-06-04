@@ -5,6 +5,8 @@ import { api } from '../api/client.js'
 import { PasswordModal } from '../components/PasswordModal.js'
 import { ScanModal } from '../components/ScanModal.js'
 import { ScanRow } from '../components/ScanRow.js'
+import { BrokerReportPanel } from '../components/BrokerReportPanel.js'
+import { StatusBadge } from '../components/StatusBadge.js'
 import type { Profile, OptOutRequest, ScanJob, ProfilePII } from '../types.js'
 
 const FIELD = 'w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm'
@@ -25,6 +27,7 @@ export function ProfileDetail() {
   const [saving, setSaving]           = useState(false)
   const [decryptErr, setDecryptErr]   = useState('')
   const [error, setError]             = useState('')
+  const [selectedOptOut, setSelectedOptOut] = useState<OptOutRequest | null>(null)
 
   const load = async () => {
     if (!id) return
@@ -226,6 +229,46 @@ export function ProfileDetail() {
           <p className="text-slate-500 text-sm">Start a scan to submit opt-out requests to all brokers.</p>
         </div>
       )}
+
+      {optOuts.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+            Opt-out status
+          </h2>
+          <div className="divide-y divide-slate-800 border border-slate-800 rounded-xl overflow-hidden">
+            {[...optOuts]
+              .sort((a, b) => {
+                const order = ['failed', 'manual', 'awaiting_email', 'submitted', 'pending', 'confirmed', 'already_removed']
+                return order.indexOf(a.status) - order.indexOf(b.status)
+              })
+              .map(oo => (
+                <button
+                  key={oo.id}
+                  onClick={() => setSelectedOptOut(prev => prev?.id === oo.id ? null : oo)}
+                  className={`w-full bg-slate-900 px-4 py-3 flex items-center justify-between
+                    hover:bg-slate-800/60 transition text-left
+                    ${selectedOptOut?.id === oo.id ? 'ring-1 ring-inset ring-brand-500/40 bg-slate-800/60' : ''}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-white">{oo.broker_name ?? oo.broker_id}</span>
+                    {oo.broker_type && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        oo.broker_type === 'auto' ? 'bg-green-900/40 text-green-400' :
+                        oo.broker_type === 'semi' ? 'bg-yellow-900/40 text-yellow-400' :
+                        'bg-slate-700 text-slate-400'
+                      }`}>
+                        {oo.broker_type}
+                      </span>
+                    )}
+                  </div>
+                  <StatusBadge status={oo.status} />
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      <BrokerReportPanel optOut={selectedOptOut} onClose={() => setSelectedOptOut(null)} />
 
       {showScan && (
         <ScanModal
