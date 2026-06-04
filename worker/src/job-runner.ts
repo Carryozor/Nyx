@@ -21,6 +21,20 @@ interface ProfileRow {
 
 interface BrokerRow { id: string }
 
+const MAX_JOB_DURATION_MS = 10 * 60 * 1000  // 10 minutes
+
+export function reaperTick(db: Database.Database): void {
+  const cutoff = new Date(Date.now() - MAX_JOB_DURATION_MS).toISOString()
+  const result = db.prepare(`
+    UPDATE scan_jobs
+    SET status = 'queued', started_at = NULL, encrypted_job_key = ''
+    WHERE status = 'running' AND started_at < ?
+  `).run(cutoff)
+  if (result.changes > 0) {
+    console.error(`[worker] reaper: requeued ${result.changes} stuck job(s)`)
+  }
+}
+
 export async function processNextJob(db: Database.Database): Promise<string | null> {
   const job = db.prepare(`
     UPDATE scan_jobs SET status='running', started_at=?
@@ -64,8 +78,14 @@ export async function processNextJob(db: Database.Database): Promise<string | nu
 }
 
 export function startJobRunner(db: Database.Database): void {
+  // Reap any jobs left in 'running' state from a previous crashed worker instance
+  reaperTick(db)
+
   const poll = async () => {
-    try { await processNextJob(db) } catch (err) { console.error('[worker] Poll error:', err) }
+    try {
+      reaperTick(db)
+      await processNextJob(db)
+    } catch (err) { console.error('[worker] Poll error:', err) }
     setTimeout(poll, config.JOB_POLL_MS)
   }
   poll()
