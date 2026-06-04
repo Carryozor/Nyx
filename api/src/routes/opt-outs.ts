@@ -16,7 +16,8 @@ export function registerOptOutRoutes(app: FastifyInstance): void {
     }
 
     const rows = db.prepare(`
-      SELECT oor.*, b.name as broker_name, b.type as broker_type, b.url as broker_url
+      SELECT oor.*, b.name as broker_name, b.type as broker_type,
+             b.url as broker_url, b.manual_guide
       FROM opt_out_requests oor
       JOIN brokers b ON b.id = oor.broker_id
       WHERE oor.profile_id = ?
