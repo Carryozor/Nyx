@@ -24,7 +24,7 @@ export function registerSimpleLoginRoutes(app: FastifyInstance): void {
       const customSuffix = options.suffixes?.find(s => s.is_custom)
       if (options.can_create && customSuffix) {
         const prefix = `nyx-${Math.random().toString(36).slice(2, 10)}`
-        const customRes = await fetch(`${SL_BASE}/alias/custom/new`, {
+        const customRes = await fetch(`${SL_BASE}/v2/alias/custom/new`, {
           method: 'POST',
           headers: { Authentication: apiKey, 'Content-Type': 'application/json' },
           body: JSON.stringify({
