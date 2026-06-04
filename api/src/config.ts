@@ -9,7 +9,7 @@ const schema = z.object({
   FRONTEND_DIST:  z.string().default('../frontend/dist'),
   COOKIE_SECURE:  z.coerce.boolean().default(false),
   SCREENSHOT_DIR:  z.string().default('/data/screenshots'),
-  WEBHOOK_SECRET:  z.string().min(16).optional(),
+  WEBHOOK_SECRET:  z.string().min(16).optional().default(''),
 })
 
 const parsed = schema.safeParse(process.env)
