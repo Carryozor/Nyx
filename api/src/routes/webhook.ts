@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { simpleParser } from 'mailparser'
 import { getDb } from '../db/client.js'
 import { config } from '../config.js'
 
@@ -90,13 +91,26 @@ export function registerWebhookRoutes(app: FastifyInstance): void {
       return reply.code(401).send({ error: 'Unauthorized' })
     }
 
-    const { to, from, subject, html } = req.body as CloudflareEmailPayload
+    const { to, from, subject, html: rawMime } = req.body as CloudflareEmailPayload
 
     console.log(`[webhook] email → to:${to} from:${from} subject:${subject?.slice(0, 60)}`)
 
-    if (!to || !html) {
+    if (!to || !rawMime) {
       return reply.send({ ok: true, skipped: 'missing to or body' })
     }
+
+    // Parse the raw MIME email to extract decoded HTML/text bodies
+    let emailHtml = ''
+    let emailText = ''
+    try {
+      const parsed = await simpleParser(rawMime)
+      emailHtml = parsed.html || ''
+      emailText = parsed.text || ''
+    } catch {
+      // fallback: treat raw content as plain text
+      emailText = rawMime
+    }
+    const emailBody = emailHtml || emailText
 
     // Find opt-out requests waiting on this alias
     const db = getDb()
@@ -135,8 +149,8 @@ export function registerWebhookRoutes(app: FastifyInstance): void {
       return reply.send({ ok: true, skipped: 'no pattern match' })
     }
 
-    // Extract confirmation URLs from the raw MIME body
-    const urls = extractConfirmationUrls(html)
+    // Extract confirmation URLs from the decoded email body
+    const urls = extractConfirmationUrls(emailBody)
     console.log(`[webhook] found ${urls.length} confirmation URL(s):`, urls)
 
     if (urls.length === 0) {
