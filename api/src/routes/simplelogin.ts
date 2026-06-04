@@ -4,12 +4,44 @@ import { requireAuth } from '../auth/middleware.js'
 const SL_BASE = 'https://app.simplelogin.io/api'
 
 export function registerSimpleLoginRoutes(app: FastifyInstance): void {
-  // Create a random alias (proxied to avoid browser CORS).
+  // Create an alias on the custom domain (vidar.fr) when available,
+  // falling back to a random alias on the default SL domain.
   // apiKey is forwarded in transit but never logged or stored.
   app.post('/simplelogin/alias', { preHandler: requireAuth }, async (req, reply) => {
     const { apiKey, note } = req.body as { apiKey?: string; note?: string }
     if (!apiKey) return reply.code(400).send({ error: 'apiKey required' })
 
+    // Try to create alias on custom domain (vidar.fr) first
+    const optionsRes = await fetch(`${SL_BASE}/v5/alias/options?hostname=vidar.fr`, {
+      headers: { Authentication: apiKey },
+    }).catch(() => null)
+
+    if (optionsRes?.ok) {
+      const options = await optionsRes.json() as {
+        can_create: boolean
+        suffixes: Array<{ suffix: string; signed_suffix: string; is_custom: boolean }>
+      }
+      const customSuffix = options.suffixes?.find(s => s.is_custom)
+      if (options.can_create && customSuffix) {
+        const prefix = `nyx-${Math.random().toString(36).slice(2, 10)}`
+        const customRes = await fetch(`${SL_BASE}/alias/custom/new`, {
+          method: 'POST',
+          headers: { Authentication: apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            alias_prefix:  prefix,
+            signed_suffix: customSuffix.signed_suffix,
+            note:          note ?? 'nyx opt-out',
+          }),
+        }).catch(() => null)
+
+        if (customRes?.ok) {
+          const data = await customRes.json() as { alias?: string; id?: number }
+          if (data.alias) return reply.send({ alias: data.alias, aliasId: data.id ?? null })
+        }
+      }
+    }
+
+    // Fallback: random alias on default SL domain
     const res = await fetch(`${SL_BASE}/alias/random/new`, {
       method: 'POST',
       headers: { Authentication: apiKey, 'Content-Type': 'application/json' },

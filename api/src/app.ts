@@ -32,6 +32,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const { registerWsRoutes }          = await import('./routes/ws.js')
   const { registerSimpleLoginRoutes } = await import('./routes/simplelogin.js')
   const { registerScreenshotRoutes }  = await import('./routes/screenshots.js')
+  const { registerWebhookRoutes }     = await import('./routes/webhook.js')
 
   app.get('/health', async () => ({ status: 'ok', version: '1.0.0' }))
 
@@ -50,6 +51,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     registerScheduleRoutes(api)
     registerSimpleLoginRoutes(api)
     registerScreenshotRoutes(api)
+    registerWebhookRoutes(api)
   }, { prefix: '/api' })
 
   if (config.NODE_ENV === 'production') {
