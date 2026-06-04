@@ -4,16 +4,9 @@ import { getDb } from '../db/client.js'
 import { config } from '../config.js'
 import { verifyPassword } from '../crypto/argon.js'
 import { deriveKey } from '../crypto/kdf.js'
-import { encrypt } from '../crypto/aes.js'
+import { encryptJobKey } from '../crypto/aes.js'
 import { requireAuth } from '../auth/middleware.js'
 import type { UserRow, ProfileRow, ScanJobRow, BrokerRow } from '../types.js'
-
-async function encryptKeyForWorker(piiKey: Buffer): Promise<string> {
-  const workerKeyBuf = Buffer.from(config.WORKER_SECRET.padEnd(32, '0').slice(0, 32))
-  const salt = Buffer.from(config.WORKER_SECRET).toString('hex').slice(0, 64).padEnd(64, '0')
-  const blob = encrypt(piiKey.toString('hex'), workerKeyBuf, salt)
-  return JSON.stringify(blob)
-}
 
 export function registerScanRoutes(app: FastifyInstance): void {
 
@@ -49,7 +42,7 @@ export function registerScanRoutes(app: FastifyInstance): void {
 
     const piiBlob = JSON.parse(profile.encrypted_pii)
     const piiKey  = await deriveKey(password, piiBlob.salt)
-    const encryptedJobKey = await encryptKeyForWorker(piiKey)
+    const encryptedJobKey = JSON.stringify(encryptJobKey(piiKey, config.WORKER_SECRET))
 
     const brokers: BrokerRow[] = brokerIds?.length
       ? db.prepare(`SELECT * FROM brokers WHERE id IN (${brokerIds.map(() => '?').join(',')}) AND active = 1`).all(...brokerIds) as BrokerRow[]

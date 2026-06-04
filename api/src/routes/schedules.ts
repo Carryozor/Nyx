@@ -4,15 +4,9 @@ import { getDb } from '../db/client.js'
 import { verifyPassword } from '../crypto/argon.js'
 import { deriveKey } from '../crypto/kdf.js'
 import { config } from '../config.js'
-import { encrypt } from '../crypto/aes.js'
+import { encryptJobKey } from '../crypto/aes.js'
 import { requireAuth } from '../auth/middleware.js'
 import type { UserRow, ProfileRow, ScanScheduleRow } from '../types.js'
-
-async function encryptKeyForWorker(piiKey: Buffer): Promise<string> {
-  const workerKeyBuf = Buffer.from(config.WORKER_SECRET.padEnd(32, '0').slice(0, 32))
-  const salt = Buffer.from(config.WORKER_SECRET).toString('hex').slice(0, 64).padEnd(64, '0')
-  return JSON.stringify(encrypt(piiKey.toString('hex'), workerKeyBuf, salt))
-}
 
 export function registerScheduleRoutes(app: FastifyInstance): void {
 
@@ -38,7 +32,7 @@ export function registerScheduleRoutes(app: FastifyInstance): void {
 
     const piiBlob  = JSON.parse(profile.encrypted_pii)
     const piiKey   = await deriveKey(password, piiBlob.salt)
-    const encKey   = await encryptKeyForWorker(piiKey)
+    const encKey   = JSON.stringify(encryptJobKey(piiKey, config.WORKER_SECRET))
     const next_run = new Date(Date.now() + intervalDays * 86400 * 1000).toISOString()
     const schedId  = uuid()
 

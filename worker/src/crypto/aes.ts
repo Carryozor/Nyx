@@ -28,9 +28,21 @@ export function encrypt(plaintext: string, key: Buffer, salt: string): Encrypted
   }
 }
 
+function deriveWorkerKey(workerSecret: string, saltHex: string): Buffer {
+  return Buffer.from(
+    crypto.hkdfSync(
+      'sha256',
+      Buffer.from(workerSecret),
+      Buffer.from(saltHex, 'hex'),
+      Buffer.alloc(0),
+      32,
+    )
+  )
+}
+
 export function decryptJobKey(encryptedJobKey: string, workerSecret: string): Buffer {
   const blob: EncryptedBlob = JSON.parse(encryptedJobKey)
-  const workerKeyBuf = Buffer.from(workerSecret.padEnd(32, '0').slice(0, 32))
-  const hexKey = decrypt(blob, workerKeyBuf)
+  const key = deriveWorkerKey(workerSecret, blob.salt)
+  const hexKey = decrypt(blob, key)
   return Buffer.from(hexKey, 'hex')
 }

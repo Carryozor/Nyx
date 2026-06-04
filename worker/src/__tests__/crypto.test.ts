@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import crypto from 'node:crypto'
 import { deriveKey, generateSalt } from '../crypto/kdf.js'
 import { encrypt, decrypt, decryptJobKey } from '../crypto/aes.js'
 
@@ -17,12 +18,14 @@ describe('worker crypto', () => {
     expect(decrypt(blob, key)).toBe('hello world')
   })
 
-  it('decryptJobKey round-trips', () => {
-    const piiKey    = Buffer.alloc(32, 0x42)
-    const secret    = 'b'.repeat(32)
-    const workerKey = Buffer.from(secret.padEnd(32, '0').slice(0, 32))
-    const salt      = Buffer.from(secret).toString('hex').slice(0, 64).padEnd(64, '0')
-    const blob      = encrypt(piiKey.toString('hex'), workerKey, salt)
+  it('decryptJobKey round-trips with HKDF derivation', () => {
+    const piiKey  = Buffer.alloc(32, 0x42)
+    const secret  = 'b'.repeat(32)
+    const saltHex = crypto.randomBytes(32).toString('hex')
+    const hkdfKey = Buffer.from(
+      crypto.hkdfSync('sha256', Buffer.from(secret), Buffer.from(saltHex, 'hex'), Buffer.alloc(0), 32)
+    )
+    const blob      = encrypt(piiKey.toString('hex'), hkdfKey, saltHex)
     const encrypted = JSON.stringify(blob)
     const recovered = decryptJobKey(encrypted, secret)
     expect(recovered.toString('hex')).toBe(piiKey.toString('hex'))

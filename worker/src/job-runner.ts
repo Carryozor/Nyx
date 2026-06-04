@@ -11,6 +11,7 @@ interface ScanJobRow {
   profile_id: string
   broker_ids: string | null
   encrypted_job_key: string
+  confirmation_email: string | null
 }
 
 interface ProfileRow {
@@ -24,7 +25,7 @@ export async function processNextJob(db: Database.Database): Promise<string | nu
   const job = db.prepare(`
     UPDATE scan_jobs SET status='running', started_at=?
     WHERE id = (SELECT id FROM scan_jobs WHERE status='queued' ORDER BY created_at LIMIT 1)
-    RETURNING id, profile_id, broker_ids, encrypted_job_key
+    RETURNING id, profile_id, broker_ids, encrypted_job_key, confirmation_email
   `).get(new Date().toISOString()) as ScanJobRow | undefined
 
   if (!job) return null
@@ -36,6 +37,9 @@ export async function processNextJob(db: Database.Database): Promise<string | nu
     const piiBlob = JSON.parse(profile.encrypted_pii)
     const pii: DecryptedPII = JSON.parse(decrypt(piiBlob, piiKey))
 
+    // Scan-specific confirmation email (e.g. a SimpleLogin alias) overrides pii.email
+    if (job.confirmation_email) pii.email = job.confirmation_email
+
     const brokerIds: string[] = job.broker_ids
       ? JSON.parse(job.broker_ids)
       : (db.prepare("SELECT id FROM brokers WHERE active=1 AND type IN ('auto','semi')").all() as BrokerRow[]).map(b => b.id)
@@ -45,13 +49,13 @@ export async function processNextJob(db: Database.Database): Promise<string | nu
       brokerIds.map(brokerId => limit(() => runBroker(db, job.id, job.profile_id, brokerId, pii)))
     )
 
-    db.prepare("UPDATE scan_jobs SET status='done', finished_at=? WHERE id=?")
+    db.prepare("UPDATE scan_jobs SET status='done', finished_at=?, encrypted_job_key='' WHERE id=?")
       .run(new Date().toISOString(), job.id)
 
     emitEvent(db, job.id, 'complete', { jobId: job.id, brokerCount: brokerIds.length })
 
   } catch (err) {
-    db.prepare("UPDATE scan_jobs SET status='failed', finished_at=? WHERE id=?")
+    db.prepare("UPDATE scan_jobs SET status='failed', finished_at=?, encrypted_job_key='' WHERE id=?")
       .run(new Date().toISOString(), job.id)
     console.error(`[worker] Job ${job.id} failed:`, err)
   }
