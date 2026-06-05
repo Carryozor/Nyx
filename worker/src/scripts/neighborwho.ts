@@ -2,7 +2,7 @@ import type { BrokerScriptFn } from './_types.js'
 import { setup, requireEmail } from './_helpers.js'
 import { peopleConnectOptOut } from './_peopleconnect.js'
 
-export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
+export const run: BrokerScriptFn = async ({ page, pii, screenshotDir, profileId, db }) => {
   const emailOrErr = requireEmail(pii)
   if (typeof emailOrErr !== 'string') return emailOrErr
 
@@ -11,5 +11,5 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
     searchUrl: 'https://www.neighborwho.com/svc/optout/search/optouts',
     emailPattern: 'neighborwho|peopleconnect',
     screenshotDir,
-  })
+  }, profileId, db)
 }

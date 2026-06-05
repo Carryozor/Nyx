@@ -74,7 +74,7 @@ export async function runBroker(
       emitEvent(db, jobId, 'progress', { broker: brokerId, attempt, phase: 'starting' })
 
       const result = await Promise.race([
-        script({ page, pii, screenshotDir, brokerId }),
+        script({ page, pii, screenshotDir, brokerId, profileId, db }),
         new Promise<OptOutResult>((_, reject) =>
           setTimeout(() => reject(new Error('Script timeout')), TIMEOUT_MS)
         ),

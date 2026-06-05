@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import type Database from 'better-sqlite3'
 
 export interface DecryptedPII {
   firstName: string
@@ -25,13 +26,15 @@ export type OptOutResult =
   | { status: 'confirmed' }
   | { status: 'already_removed' }
   | { status: 'failed'; reason: string }
-  | { status: 'manual' }
+  | { status: 'manual'; reason?: string }
 
 export interface BrokerScriptContext {
   page:          Page
   pii:           DecryptedPII
   screenshotDir: string
   brokerId:      string
+  profileId:     string
+  db:            Database.Database
 }
 
 export type BrokerScriptFn = (ctx: BrokerScriptContext) => Promise<OptOutResult>
