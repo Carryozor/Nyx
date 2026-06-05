@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/auth.js'
+import { WebSocketProvider } from './context/WebSocketContext.js'
 import { Layout }       from './components/Layout.js'
 import { Login }        from './pages/Login.js'
 import { Register }     from './pages/Register.js'
@@ -11,7 +12,9 @@ import { ProfileDetail }  from './pages/ProfileDetail.js'
 import { Brokers }      from './pages/Brokers.js'
 import { ManualGuide }  from './pages/ManualGuide.js'
 import { History }      from './pages/History.js'
+import { ScanDetail }   from './pages/ScanDetail.js'
 import { Settings }     from './pages/Settings.js'
+import { Schedules }    from './pages/Schedules.js'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, initialized } = useAuthStore()
@@ -44,18 +47,22 @@ export function App() {
 
       <Route path="/*" element={
         <AuthGuard>
+          <WebSocketProvider>
           <Layout>
             <Routes>
               <Route index             element={<Dashboard />} />
               <Route path="profiles"      element={<Profiles />} />
               <Route path="profiles/new" element={<ProfileWizard />} />
               <Route path="profiles/:id" element={<ProfileDetail />} />
+              <Route path="schedules"   element={<Schedules />} />
               <Route path="brokers"    element={<Brokers />} />
               <Route path="history"    element={<History />} />
+              <Route path="scans/:id" element={<ScanDetail />} />
               <Route path="guide"      element={<ManualGuide />} />
               <Route path="settings"   element={<AdminGuard><Settings /></AdminGuard>} />
             </Routes>
           </Layout>
+          </WebSocketProvider>
         </AuthGuard>
       } />
     </Routes>
