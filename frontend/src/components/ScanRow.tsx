@@ -49,9 +49,10 @@ interface Props {
   job: ScanJob
   onAliasDeleted: (id: string) => void
   showProfileLink?: boolean
+  onSelectOptOut?: (oo: OptOutRequest) => void
 }
 
-export function ScanRow({ job, onAliasDeleted, showProfileLink = false }: Props) {
+export function ScanRow({ job, onAliasDeleted, showProfileLink = false, onSelectOptOut }: Props) {
   const { scans } = useWsContext()
   const live = scans.get(job.id)
 
@@ -294,7 +295,13 @@ export function ScanRow({ job, onAliasDeleted, showProfileLink = false }: Props)
                         </p>
                         <div className="divide-y divide-slate-800 border border-slate-800 rounded-lg overflow-hidden">
                           {items.map((oo: OptOutRequest) => (
-                            <div key={oo.id} className="bg-slate-900 px-4 py-2.5 flex items-center justify-between gap-4">
+                            <button
+                              key={oo.id}
+                              onClick={() => onSelectOptOut?.(oo)}
+                              className={`w-full bg-slate-900 px-4 py-2.5 flex items-center justify-between gap-4 text-left transition ${
+                                onSelectOptOut ? 'hover:bg-slate-800/60 cursor-pointer' : 'cursor-default'
+                              }`}
+                            >
                               <div className="flex items-center gap-3 min-w-0">
                                 <span className="text-sm text-white truncate">{oo.broker_name ?? oo.broker_id}</span>
                                 {oo.broker_type && (
@@ -321,7 +328,7 @@ export function ScanRow({ job, onAliasDeleted, showProfileLink = false }: Props)
                                 )}
                                 <StatusBadge status={oo.status} />
                               </div>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>

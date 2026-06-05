@@ -298,6 +298,7 @@ export function ProfileDetail() {
                 onAliasDeleted={id => setJobs(prev => prev.map(j =>
                   j.id === id ? { ...j, simplelogin_alias_id: null, confirmation_email: null } : j
                 ))}
+                onSelectOptOut={oo => setSelectedOptOut(prev => prev?.id === oo.id ? null : oo)}
               />
             ))}
           </div>
