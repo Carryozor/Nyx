@@ -1,5 +1,5 @@
 import type { BrokerScriptFn } from './_types.js'
-import { setup, humanDelay, screenshot, requireEmail, hasCaptcha, sleep, stateAbbr } from './_helpers.js'
+import { setup, humanDelay, screenshot, requireEmail, hasCaptcha, sleep, stateAbbr, calculateAge } from './_helpers.js'
 
 export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   const emailOrErr = requireEmail(pii)
@@ -12,8 +12,9 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   // shows individual profiles with their unique /pNNNN IDs.
   const locationPart = [pii.currentAddress.city, pii.currentAddress.state]
     .filter(Boolean).join(' ')
+  const age = calculateAge(pii.dob)
   const q = encodeURIComponent(`${pii.firstName} ${pii.lastName}${locationPart ? ' ' + locationPart : ''}`)
-  await page.goto(`https://www.spokeo.com/search?q=${q}&type=people`, {
+  await page.goto(`https://www.spokeo.com/search?q=${q}&type=people${age ? `&age=${age}` : ''}`, {
     waitUntil: 'domcontentloaded',
     timeout: 30000,
   })

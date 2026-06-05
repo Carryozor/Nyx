@@ -1,5 +1,5 @@
 import type { BrokerScriptFn } from './_types.js'
-import { setup, humanDelay, screenshot, hasCaptcha, sleep, requireEmail } from './_helpers.js'
+import { setup, humanDelay, screenshot, hasCaptcha, sleep, fillAge, requireEmail } from './_helpers.js'
 
 // Hoodspot — annuaire français avec formulaire de suppression de profil
 export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
@@ -37,6 +37,9 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
     await nameInput.fill(`${pii.firstName} ${pii.lastName}`).catch(() => {})
     await humanDelay(200, 400)
   }
+
+  await fillAge(page, pii.dob).catch(() => {})
+  await humanDelay(200, 400)
 
   await screenshot(page, screenshotDir, 'form-filled')
 

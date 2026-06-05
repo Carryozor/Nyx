@@ -1,5 +1,5 @@
 import type { BrokerScriptFn } from './_types.js'
-import { setup, humanDelay, screenshot, hasCaptcha, sleep } from './_helpers.js'
+import { setup, humanDelay, screenshot, hasCaptcha, sleep, fillAge } from './_helpers.js'
 
 // 118712 (SFR annuaire) — suppression de fiche via formulaire web
 export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
@@ -33,6 +33,9 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   if (await phoneInput.isVisible({ timeout: 3000 }).catch(() => false)) {
     if (pii.phone) await phoneInput.fill(pii.phone).catch(() => {})
   }
+
+  await fillAge(page, pii.dob).catch(() => {})
+  await humanDelay(200, 400)
 
   await screenshot(page, screenshotDir, 'form-filled')
 

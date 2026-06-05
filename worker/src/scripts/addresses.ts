@@ -1,5 +1,5 @@
 import type { BrokerScriptFn } from './_types.js'
-import { setup, humanDelay, screenshot, requireEmail, hasCaptcha, sleep, stateAbbr } from './_helpers.js'
+import { setup, humanDelay, screenshot, requireEmail, hasCaptcha, sleep, stateAbbr, fillAge } from './_helpers.js'
 
 export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   const emailOrErr = requireEmail(pii)
@@ -28,6 +28,9 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
     )
     await humanDelay(200, 400)
   }
+  await fillAge(page, pii.dob).catch(() => {})
+  await humanDelay(200, 400)
+
   await screenshot(page, screenshotDir, 'form-filled')
   if (await hasCaptcha(page)) return { status: 'failed', reason: 'captcha before submit' }
   await page.locator('button[type="submit"], input[type="submit"], button:has-text("Remove"), button:has-text("Submit"), button:has-text("Opt Out")').first().click().catch(() => {})

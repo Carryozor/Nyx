@@ -1,5 +1,5 @@
 import type { BrokerScriptFn } from './_types.js'
-import { setup, humanDelay, screenshot, requireEmail, hasCaptcha, sleep } from './_helpers.js'
+import { setup, humanDelay, screenshot, requireEmail, hasCaptcha, sleep, fillAge } from './_helpers.js'
 
 export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   const emailOrErr = requireEmail(pii)
@@ -56,6 +56,9 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
     }
     await humanDelay(200, 400)
   }
+
+  await fillAge(page, pii.dob).catch(() => {})
+  await humanDelay(200, 400)
 
   await screenshot(page, screenshotDir, 'form-filled')
 

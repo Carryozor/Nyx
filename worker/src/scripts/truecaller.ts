@@ -1,5 +1,5 @@
 import type { BrokerScriptFn } from './_types.js'
-import { setup, humanDelay, screenshot, hasCaptcha, sleep } from './_helpers.js'
+import { setup, humanDelay, screenshot, hasCaptcha, sleep, fillAge } from './_helpers.js'
 
 // Truecaller unlisting: submit name + phone number to remove from directory.
 // No login required, no email confirmation — just a form submission.
@@ -40,6 +40,9 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
 
   await phoneInput.fill(pii.phone)
   await humanDelay(400, 700)
+
+  await fillAge(page, pii.dob).catch(() => {})
+  await humanDelay(200, 400)
 
   await screenshot(page, screenshotDir, 'form-filled')
 
