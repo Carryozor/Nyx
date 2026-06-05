@@ -39,7 +39,16 @@ export async function runBroker(
   const screenshotDir = path.join(config.SCREENSHOT_DIR, jobId, brokerId)
 
   // Use broker's script_file from DB when it differs from the broker ID
-  const brokerRow = db.prepare('SELECT script_file FROM brokers WHERE id=?').get(brokerId) as { script_file: string | null } | undefined
+  const brokerRow = db.prepare('SELECT script_file, manual_guide FROM brokers WHERE id=?').get(brokerId) as { script_file: string | null; manual_guide: string | null } | undefined
+
+  // Brokers with no script_file are manual-only — skip automation entirely
+  if (brokerRow && brokerRow.script_file === null) {
+    const result: OptOutResult = { status: 'manual', reason: brokerRow.manual_guide ? undefined : `No automation script for ${brokerId} — opt out manually` }
+    db.prepare(`UPDATE opt_out_requests SET status='manual', last_attempt=?, attempts=attempts+1, notes=? WHERE profile_id=? AND broker_id=?`)
+      .run(new Date().toISOString(), 'reason' in result ? result.reason ?? null : null, profileId, brokerId)
+    return result
+  }
+
   const scriptFile = brokerRow?.script_file ?? `${brokerId}.js`
   fs.mkdirSync(screenshotDir, { recursive: true })
 

@@ -1,0 +1,52 @@
+import type { BrokerScriptFn } from './_types.js'
+import { setup, humanDelay, screenshot, hasCaptcha, sleep, requireEmail } from './_helpers.js'
+
+// Hoodspot — annuaire français avec formulaire de suppression de profil
+export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
+  const emailOrErr = requireEmail(pii)
+  if (typeof emailOrErr !== 'string') return emailOrErr
+
+  await setup(page)
+
+  await page.goto('https://www.hoodspot.fr/suppression-profil', {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000,
+  }).catch(() => null)
+  await humanDelay()
+
+  if (await hasCaptcha(page)) {
+    return { status: 'manual', reason: 'CAPTCHA sur Hoodspot — visitez hoodspot.fr/suppression-profil manuellement' }
+  }
+
+  await page.locator('button:has-text("Accepter"), button:has-text("OK")')
+    .first().click().catch(() => {})
+  await sleep(400)
+
+  await screenshot(page, screenshotDir, 'page')
+
+  const emailInput = page.locator('input[type="email"], input[name*="email" i]').first()
+  if (!(await emailInput.isVisible({ timeout: 10000 }).catch(() => false))) {
+    return { status: 'manual', reason: 'Formulaire Hoodspot non trouvé — visitez hoodspot.fr manuellement' }
+  }
+
+  await emailInput.fill(emailOrErr).catch(() => {})
+  await humanDelay(300, 600)
+
+  const nameInput = page.locator('input[name*="nom" i], input[placeholder*="nom" i], input[name*="name" i]').first()
+  if (await nameInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await nameInput.fill(`${pii.firstName} ${pii.lastName}`).catch(() => {})
+    await humanDelay(200, 400)
+  }
+
+  await screenshot(page, screenshotDir, 'form-filled')
+
+  const submitBtn = page.locator('button[type="submit"], input[type="submit"], button:has-text("Supprimer"), button:has-text("Envoyer")').first()
+  if (!(await submitBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+    return { status: 'manual', reason: 'Bouton de suppression Hoodspot non trouvé' }
+  }
+
+  await submitBtn.click()
+  await sleep(2000)
+  await screenshot(page, screenshotDir, 'done')
+  return { status: 'submitted' }
+}
