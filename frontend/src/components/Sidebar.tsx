@@ -1,17 +1,19 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, Shield, Clock, BookOpen, Settings, LogOut, Moon } from 'lucide-react'
+import { LayoutDashboard, Users, Shield, Clock, Calendar, BookOpen, Settings, LogOut } from 'lucide-react'
 import { useAuthStore } from '../store/auth.js'
+import { NyxLogo } from './NyxLogo.js'
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
 
   const adminLinks = [
-    { to: '/',         icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/profiles', icon: Users,           label: 'Profiles' },
-    { to: '/brokers',  icon: Shield,          label: 'Brokers' },
-    { to: '/history',  icon: Clock,           label: 'History' },
-    { to: '/guide',    icon: BookOpen,        label: 'Manual Guide' },
-    { to: '/settings', icon: Settings,        label: 'Settings' },
+    { to: '/',           icon: LayoutDashboard, label: 'Dashboard'    },
+    { to: '/profiles',   icon: Users,           label: 'Profiles'     },
+    { to: '/brokers',    icon: Shield,          label: 'Brokers'      },
+    { to: '/schedules',  icon: Calendar,        label: 'Schedules'    },
+    { to: '/history',    icon: Clock,           label: 'History'      },
+    { to: '/guide',      icon: BookOpen,        label: 'Manual Guide' },
+    { to: '/settings',   icon: Settings,        label: 'Settings'     },
   ]
 
   const userLinks = [
@@ -26,10 +28,16 @@ export function Sidebar() {
   return (
     <aside className="w-56 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-screen sticky top-0">
       <div className="px-4 py-5 flex items-center gap-3 border-b border-slate-800">
-        <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
-          <Moon size={16} className="text-white" />
-        </div>
-        <span className="text-white font-semibold tracking-wide">Nyx</span>
+        <NyxLogo size={32} />
+        <span style={{
+          fontFamily: "'Outfit', sans-serif",
+          fontWeight: 700,
+          fontSize: '15px',
+          background: 'linear-gradient(90deg, #818cf8, #c4b5fd)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          letterSpacing: '.04em',
+        }}>NYX</span>
       </div>
 
       <nav className="flex-1 px-2 py-4 space-y-1">
