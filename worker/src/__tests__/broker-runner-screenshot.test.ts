@@ -60,7 +60,7 @@ describe('broker-runner screenshot storage', () => {
     expect(row.screenshot).toBe('job1')
   })
 
-  it('does not overwrite an existing screenshot job_id (COALESCE)', async () => {
+  it('overwrites existing screenshot job_id with the latest run (always shows fresh screenshots)', async () => {
     const db = makeDb()
     db.prepare('UPDATE opt_out_requests SET screenshot = ? WHERE id = ?').run('job0', 'oo1')
     db.prepare("INSERT INTO scan_jobs VALUES ('job1','p1',NULL,'queued','{}',NULL,'2026-01-01',NULL,NULL,'u1')").run()
@@ -74,6 +74,7 @@ describe('broker-runner screenshot storage', () => {
     await runBroker(db, 'job1', 'p1', 'testbroker', pii)
 
     const row = db.prepare('SELECT screenshot FROM opt_out_requests WHERE id = ?').get('oo1') as { screenshot: string | null }
-    expect(row.screenshot).toBe('job0')
+    // Always updated to the latest job so screenshots reflect the current scan
+    expect(row.screenshot).toBe('job1')
   })
 })

@@ -81,7 +81,7 @@ export async function runBroker(
             submitted_at = CASE WHEN ? IN ('submitted','awaiting_email','confirmed') THEN ? ELSE submitted_at END,
             notes = ?,
             confirmation_pattern = COALESCE(?, confirmation_pattern),
-            screenshot = COALESCE(screenshot, ?)
+            screenshot = ?
         WHERE profile_id = ? AND broker_id = ?
       `).run(
         result.status, new Date().toISOString(),
