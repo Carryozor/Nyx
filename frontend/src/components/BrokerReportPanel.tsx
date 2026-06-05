@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, Mail, BookOpen } from 'lucide-react'
+import { X, Mail, BookOpen, ZoomIn } from 'lucide-react'
 import { api } from '../api/client.js'
 import { StatusBadge } from './StatusBadge.js'
 import type { OptOutRequest } from '../types.js'
@@ -42,7 +42,8 @@ function fmt(date: string | null): string {
 
 export function BrokerReportPanel({ optOut, onClose }: BrokerReportPanelProps) {
   const [screenshots, setScreenshots] = useState<Screenshot[]>([])
-  const [activeShot, setActiveShot] = useState(0)
+  const [activeShot, setActiveShot]   = useState(0)
+  const [lightbox, setLightbox]       = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -145,16 +146,46 @@ export function BrokerReportPanel({ optOut, onClose }: BrokerReportPanelProps) {
                   </button>
                 ))}
               </div>
-              <div className="p-2">
+              <div className="p-2 relative group">
                 <img
                   src={screenshots[activeShot].url}
                   alt={screenshots[activeShot].filename}
-                  className="w-full rounded object-contain"
+                  className="w-full rounded object-contain cursor-zoom-in"
                   style={{ aspectRatio: '16/9', background: '#0f172a' }}
+                  onClick={() => setLightbox(screenshots[activeShot].url)}
                 />
+                <button
+                  onClick={() => setLightbox(screenshots[activeShot].url)}
+                  className="absolute top-3 right-3 p-1.5 bg-slate-800/80 rounded-md text-slate-400
+                    opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Agrandir"
+                >
+                  <ZoomIn size={13} />
+                </button>
               </div>
             </div>
           </>
+        )}
+
+        {/* Lightbox plein écran */}
+        {lightbox && (
+          <div
+            className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
+            onClick={() => setLightbox(null)}
+          >
+            <button
+              onClick={() => setLightbox(null)}
+              className="absolute top-4 right-4 p-2 bg-slate-800 rounded-lg text-slate-300 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+            <img
+              src={lightbox}
+              alt="Screenshot"
+              className="max-w-full max-h-full rounded-lg object-contain"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
         )}
 
         {optOut.manual_guide && (

@@ -194,6 +194,14 @@ export function ScanRow({ job, onAliasDeleted, showProfileLink = false }: Props)
                 profile
               </Link>
             )}
+            <Link
+              to={`/scans/${job.id}`}
+              onClick={e => e.stopPropagation()}
+              className="text-slate-500 hover:text-brand-400 transition"
+              title="Voir le détail complet"
+            >
+              <ExternalLink size={13} />
+            </Link>
           </div>
         </div>
 
