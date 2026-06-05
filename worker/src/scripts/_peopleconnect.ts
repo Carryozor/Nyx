@@ -39,13 +39,14 @@ export async function peopleConnectOptOut(
   const { emailPattern, screenshotDir } = cfg
 
   // ── Deduplication guard ──────────────────────────────────────────────────
-  // If any PeopleConnect family broker already succeeded for this profile,
-  // inherit the result without launching another browser session.
+  // Only skip if another PeopleConnect broker was submitted in the LAST 30 MINUTES
+  // (i.e. within the current scan). Avoids re-using stale awaiting_email from old scans.
   const alreadySubmitted = db.prepare(`
     SELECT status FROM opt_out_requests
     WHERE profile_id = ?
       AND broker_id IN (${PEOPLECONNECT_BROKERS.map(() => '?').join(',')})
       AND status = 'awaiting_email'
+      AND last_attempt > datetime('now', '-30 minutes')
     LIMIT 1
   `).get(profileId, ...PEOPLECONNECT_BROKERS) as { status: string } | undefined
 

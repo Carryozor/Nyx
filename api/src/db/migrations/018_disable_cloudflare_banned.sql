@@ -72,3 +72,20 @@ WHERE status = 'failed'
 
 UPDATE opt_out_requests SET status = 'manual', notes = 'Site inaccessible (DNS error) — désactivé'
 WHERE status = 'failed' AND broker_id = 'officialusa';
+
+-- MyLife: all URLs return 403, convert to manual
+UPDATE brokers SET type = 'manual', manual_guide =
+'## MyLife
+
+MyLife bloque les IP serveur. Opt-out manuel depuis votre navigateur.
+
+1. Va sur https://www.mylife.com/privacy/remove depuis ton navigateur
+2. Connecte-toi ou crée un compte
+3. Va dans Privacy → Remove My Information
+4. Ou envoie un email à : privacy@mylife.com
+5. Objet : "Remove My Information - CCPA/GDPR Request"
+6. Délai : 7-30 jours.'
+WHERE id = 'mylife';
+
+UPDATE opt_out_requests SET status = 'manual', notes = 'IP serveur bloquée (Cloudflare 403) — opt-out manuel requis'
+WHERE broker_id = 'mylife' AND status = 'failed';
