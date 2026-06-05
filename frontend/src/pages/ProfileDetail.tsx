@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ChevronLeft, Play, CheckCircle2, Clock, AlertTriangle, XCircle, Edit2, Save, X } from 'lucide-react'
+import { ChevronLeft, Play, CheckCircle2, Clock, AlertTriangle, XCircle, Edit2, Save, X, Calendar } from 'lucide-react'
 import { api } from '../api/client.js'
 import { PasswordModal } from '../components/PasswordModal.js'
 import { ScanModal } from '../components/ScanModal.js'
 import { ScanRow } from '../components/ScanRow.js'
 import { BrokerReportPanel } from '../components/BrokerReportPanel.js'
 import { StatusBadge } from '../components/StatusBadge.js'
-import type { Profile, OptOutRequest, ScanJob, ProfilePII } from '../types.js'
+import type { Profile, OptOutRequest, ScanJob, ProfilePII, ScanSchedule } from '../types.js'
 
 const FIELD = 'w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm'
 const LABEL = 'block text-sm text-slate-400 mb-1'
@@ -29,17 +29,29 @@ export function ProfileDetail() {
   const [error, setError]             = useState('')
   const [selectedOptOut, setSelectedOptOut] = useState<OptOutRequest | null>(null)
 
+  const [schedule, setSchedule]               = useState<ScanSchedule | null>(null)
+  const [scheduleInterval, setScheduleInterval] = useState(30)
+  const [showSchedulePwd, setShowSchedulePwd]   = useState(false)
+  const [scheduleSaving, setScheduleSaving]     = useState(false)
+
   const load = async () => {
     if (!id) return
     try {
-      const [p, oo, scans] = await Promise.all([
+      const [p, oo, scans, sched] = await Promise.all([
         api.profiles.get(id) as Promise<Profile>,
         api.optOuts.forProfile(id).catch(() => []) as Promise<OptOutRequest[]>,
         (api.profiles.scans(id) as Promise<ScanJob[]>).catch(() => [] as ScanJob[]),
+        (api.schedule.get(id) as Promise<ScanSchedule | null>).catch(() => null),
       ])
       setProfile(p)
       setOptOuts(oo)
       setJobs(scans)
+      if (sched) {
+        setSchedule(sched)
+        setScheduleInterval(sched.interval_days)
+      } else {
+        setSchedule(null)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load profile')
     } finally {
@@ -79,6 +91,31 @@ export function ProfileDetail() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleEnableSchedule = async (password: string) => {
+    if (!id) return
+    setScheduleSaving(true)
+    try {
+      await api.schedule.set(id, password, scheduleInterval)
+      const sched = await api.schedule.get(id) as ScanSchedule
+      setSchedule(sched)
+      setScheduleInterval(sched.interval_days)
+      setShowSchedulePwd(false)
+    } finally {
+      setScheduleSaving(false)
+    }
+  }
+
+  const handleDisableSchedule = async () => {
+    if (!id) return
+    await api.schedule.delete(id)
+    setSchedule(null)
+  }
+
+  const handleIntervalChange = (days: number) => {
+    setScheduleInterval(days)
+    if (schedule?.enabled) setShowSchedulePwd(true)
   }
 
   const activeJob = jobs.find(j => j.status === 'running' || j.status === 'queued')
@@ -205,6 +242,50 @@ export function ProfileDetail() {
         </div>
       </div>
 
+      {/* Auto-scan schedule */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+            <Calendar size={14} /> Auto-scan schedule
+          </h2>
+          <button
+            onClick={() => schedule?.enabled ? handleDisableSchedule() : setShowSchedulePwd(true)}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+              schedule?.enabled ? 'bg-brand-600' : 'bg-slate-700'
+            }`}
+            aria-label={schedule?.enabled ? 'Disable schedule' : 'Enable schedule'}
+          >
+            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+              schedule?.enabled ? 'translate-x-4' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
+        {schedule?.enabled ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-400">Scan every</span>
+              <select
+                value={scheduleInterval}
+                onChange={e => handleIntervalChange(Number(e.target.value))}
+                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                {[7, 14, 30, 60, 90].map(d => (
+                  <option key={d} value={d}>{d} days</option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-slate-500">
+              Next scan: {new Date(schedule.next_run).toLocaleDateString()}
+              {schedule.last_run && ` · Last: ${new Date(schedule.last_run).toLocaleDateString()}`}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">
+            Automatically run a scan at regular intervals. Requires your master password to activate.
+          </p>
+        )}
+      </div>
+
       {/* Scan history — expandable with live progress */}
       {jobs.length > 0 && (
         <div className="mb-8">
@@ -282,6 +363,16 @@ export function ProfileDetail() {
           title="Enter password to edit profile"
           onConfirm={async (pwd) => { setShowDecryptForEdit(false); await handleDecryptForEdit(pwd) }}
           onCancel={() => { setShowDecryptForEdit(false); setDecryptErr('') }}
+        />
+      )}
+      {showSchedulePwd && (
+        <PasswordModal
+          title={schedule?.enabled ? 'Update schedule' : 'Enable auto-scan'}
+          onConfirm={handleEnableSchedule}
+          onCancel={() => {
+            setShowSchedulePwd(false)
+            setScheduleInterval(schedule?.interval_days ?? 30)
+          }}
         />
       )}
     </div>
