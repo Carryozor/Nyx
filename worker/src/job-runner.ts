@@ -25,13 +25,15 @@ const MAX_JOB_DURATION_MS = 10 * 60 * 1000  // 10 minutes
 
 export function reaperTick(db: Database.Database): void {
   const cutoff = new Date(Date.now() - MAX_JOB_DURATION_MS).toISOString()
+  // Mark stuck jobs as failed — we cannot re-queue because the worker cleared the
+  // encrypted_job_key from memory on crash, making decryption impossible.
   const result = db.prepare(`
     UPDATE scan_jobs
-    SET status = 'queued', started_at = NULL, encrypted_job_key = ''
+    SET status = 'failed', finished_at = ?, encrypted_job_key = ''
     WHERE status = 'running' AND started_at < ?
-  `).run(cutoff)
+  `).run(new Date().toISOString(), cutoff)
   if (result.changes > 0) {
-    console.error(`[worker] reaper: requeued ${result.changes} stuck job(s)`)
+    console.error(`[worker] reaper: marked ${result.changes} stuck job(s) as failed`)
   }
 }
 

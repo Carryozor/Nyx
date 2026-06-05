@@ -97,7 +97,7 @@ export async function peopleConnectOptOut(
   }
 
   await continueBtn.click()
-  await sleep(3000)
+  await sleep(4000)
 
   if (await hasCaptcha(page)) {
     return { status: 'failed', reason: 'CAPTCHA after submitting email to suppression centre' }
@@ -105,10 +105,12 @@ export async function peopleConnectOptOut(
 
   await screenshot(page, screenshotDir, 'submitted')
 
-  // ── Detect errors on the page after submission ───────────────────────────
+  const currentUrl = page.url()
   const bodyText = (await page.textContent('body').catch(() => '') ?? '').toLowerCase()
+  console.error(`[peopleconnect] post-submit url=${currentUrl} body_len=${bodyText.length}`)
 
-  const errorPatterns = [
+  // ── Explicit error detection ─────────────────────────────────────────────
+  const errorPatterns: RegExp[] = [
     /something went wrong/i,
     /please try again/i,
     /error occurred/i,
@@ -116,34 +118,42 @@ export async function peopleConnectOptOut(
     /request failed/i,
     /too many requests/i,
     /rate limit/i,
+    /temporarily unavailable/i,
   ]
-
   for (const pattern of errorPatterns) {
     if (pattern.test(bodyText)) {
       await screenshot(page, screenshotDir, 'error-page')
+      const match = bodyText.match(pattern)?.[0] ?? 'unknown'
+      console.error(`[peopleconnect] error on page: "${match}"`)
       return {
         status: 'failed',
-        reason: `PeopleConnect suppression centre returned an error: "${
-          bodyText.match(pattern)?.[0] ?? 'unknown error'
-        }" — le portail peut avoir détecté une automatisation ou appliqué un rate-limit. Réessayez plus tard ou soumettez manuellement sur suppression.peopleconnect.us`,
+        reason: `PeopleConnect: "${match}" — rate-limit ou bot détecté. Soumettez manuellement sur suppression.peopleconnect.us`,
       }
     }
   }
 
-  // Success indicators
-  const successPatterns = [
+  // ── Explicit success detection ───────────────────────────────────────────
+  // Only return awaiting_email when the page CONFIRMS an email was sent.
+  const successPatterns: RegExp[] = [
     /check your email/i,
     /email.*sent/i,
     /verification.*link/i,
     /we.*sent/i,
     /confirm.*email/i,
+    /please verify/i,
+    /look for.*email/i,
   ]
   const isSuccess = successPatterns.some(p => p.test(bodyText))
 
   if (!isSuccess) {
-    // Page didn't clearly succeed — take screenshot for debugging
     await screenshot(page, screenshotDir, 'ambiguous-result')
+    console.error(`[peopleconnect] ambiguous result — no success/error pattern matched. URL: ${currentUrl}`)
+    return {
+      status: 'failed',
+      reason: 'PeopleConnect: résultat ambigu (ni succès ni erreur confirmé). Soumettez manuellement sur suppression.peopleconnect.us',
+    }
   }
 
+  console.error(`[peopleconnect] success confirmed — email envoyé à ${email}`)
   return { status: 'awaiting_email', confirmationPattern: emailPattern }
 }

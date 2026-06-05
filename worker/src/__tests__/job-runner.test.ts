@@ -45,7 +45,7 @@ describe('processNextJob', () => {
     expect(['running', 'done', 'failed']).toContain(job.status)
   })
 
-  it('reaperTick requeues jobs stuck in running for over 10 minutes', async () => {
+  it('reaperTick marks stuck jobs as failed in running for over 10 minutes', async () => {
     const db = makeDb()
     const tenMinutesAgo = new Date(Date.now() - 11 * 60 * 1000).toISOString()
     db.prepare("INSERT INTO scan_jobs VALUES ('j-stuck','p1',NULL,'running','{}',NULL,'2026-01-01',?,NULL,'u1')")
@@ -54,7 +54,7 @@ describe('processNextJob', () => {
     reaperTick(db)
 
     const job = db.prepare('SELECT status FROM scan_jobs WHERE id=?').get('j-stuck') as { status: string }
-    expect(job.status).toBe('queued')
+    expect(job.status).toBe('failed')
   })
 
   it('reaperTick does not requeue jobs running for less than 10 minutes', async () => {

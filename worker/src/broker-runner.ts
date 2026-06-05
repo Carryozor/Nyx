@@ -73,14 +73,25 @@ export async function runBroker(
 
       emitEvent(db, jobId, 'progress', { broker: brokerId, attempt, phase: 'starting' })
 
-      const result = await Promise.race([
-        script({ page, pii, screenshotDir, brokerId, profileId, db }),
-        new Promise<OptOutResult>((_, reject) =>
-          setTimeout(() => reject(new Error('Script timeout')), TIMEOUT_MS)
-        ),
-      ])
+      let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error('Script timeout')), TIMEOUT_MS)
+      })
 
-      await browser.close()
+      let result: OptOutResult
+      try {
+        result = await Promise.race([
+          script({ page, pii, screenshotDir, brokerId, profileId, db }),
+          timeoutPromise,
+        ])
+      } finally {
+        // Always clear the timeout and close the browser — this prevents
+        // the orphaned script from sending CDP commands to a closed browser,
+        // which would throw uncaughtException and kill the worker process.
+        if (timeoutHandle !== null) clearTimeout(timeoutHandle)
+        try { await browser.close() } catch { /* ignore close errors */ }
+        browser = undefined
+      }
 
       const confirmationPattern = result.status === 'awaiting_email' ? result.confirmationPattern : null
       const notes = 'reason' in result ? result.reason : null
@@ -107,7 +118,7 @@ export async function runBroker(
 
     } catch (err) {
       lastError = String(err)
-      await browser?.close().catch(() => {})
+      if (browser) { try { await browser.close() } catch { /* ignore */ } }
       if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, attempt * 2000))
     }
   }
