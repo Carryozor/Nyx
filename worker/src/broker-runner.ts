@@ -67,6 +67,7 @@ export async function runBroker(
         locale: 'en-US',
         timezoneId: 'America/New_York',
         viewport: { width: 1280, height: 800 },
+        ignoreHTTPSErrors: true,
       })
       const page = await context.newPage()
 
