@@ -144,16 +144,17 @@ export function registerWebhookRoutes(app: FastifyInstance): void {
     }
     const emailBody = emailHtml || emailText
 
-    // Find awaiting opt-outs for this alias
+    // Find opt-outs for this alias — include 'pending' to handle the race condition
+    // where PeopleConnect sends the confirmation email before all scripts finish running.
     const pending = db.prepare(`
-      SELECT oor.id, oor.broker_id, oor.confirmation_pattern, b.name as broker_name
+      SELECT oor.id, oor.broker_id, oor.status, oor.confirmation_pattern, b.name as broker_name
       FROM opt_out_requests oor
       JOIN brokers b ON b.id = oor.broker_id
       JOIN scan_jobs sj ON sj.profile_id = oor.profile_id
-      WHERE oor.status = 'awaiting_email'
+      WHERE oor.status IN ('awaiting_email', 'pending')
         AND LOWER(sj.confirmation_email) = LOWER(?)
     `).all(to) as Array<{
-      id: string; broker_id: string; broker_name: string; confirmation_pattern: string | null
+      id: string; broker_id: string; status: string; broker_name: string; confirmation_pattern: string | null
     }>
 
     if (pending.length === 0) {
