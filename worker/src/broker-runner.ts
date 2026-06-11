@@ -53,10 +53,15 @@ export async function runBroker(
 
   // GDPR email-based brokers: send the Article 17 erasure email — no browser needed.
   if (brokerRow && brokerRow.opt_out_email) {
+    // Reply redirection: if the profile has a delegate address, brokers reply there
+    // directly (Reply-To). No SimpleLogin mailbox/account needed for the delegate.
+    const profileRow = db.prepare('SELECT redirect_email FROM profiles WHERE id=?').get(profileId) as { redirect_email: string | null } | undefined
+    const replyTo = (profileRow?.redirect_email || pii.email) ?? undefined
+
     const result = await sendGdprEmail(
       { id: brokerId, name: brokerRow.name, opt_out_email: brokerRow.opt_out_email, gdpr_lang: brokerRow.gdpr_lang, audience: brokerRow.audience },
       pii,
-      pii.email,
+      replyTo,
     )
     const confirmationPattern = result.status === 'awaiting_email' ? result.confirmationPattern : null
     const notes = 'reason' in result ? result.reason : null

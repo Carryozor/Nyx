@@ -63,57 +63,6 @@ export function registerSimpleLoginRoutes(app: FastifyInstance): void {
     return reply.send({ alias: data.alias, aliasId: data.id ?? null })
   })
 
-  // List the account's SimpleLogin mailboxes (id, email, verified).
-  app.post('/simplelogin/mailboxes', { preHandler: requireAuth }, async (req, reply) => {
-    const { apiKey } = req.body as { apiKey?: string }
-    if (!apiKey) return reply.code(400).send({ error: 'apiKey required' })
-    const res = await fetch(`${SL_BASE}/mailboxes`, { headers: { Authentication: apiKey }, signal: AbortSignal.timeout(SL_TIMEOUT) }).catch(() => null)
-    if (!res || !res.ok) return reply.code(res?.status ?? 502).send({ error: 'Could not list mailboxes' })
-    const data = await res.json() as { mailboxes?: { id: number; email: string; verified: boolean; default: boolean }[] }
-    return reply.send({ mailboxes: data.mailboxes ?? [] })
-  })
-
-  // Add a mailbox (delegate address). SimpleLogin emails a verification link to it.
-  app.post('/simplelogin/mailboxes/add', { preHandler: requireAuth }, async (req, reply) => {
-    const { apiKey, email } = req.body as { apiKey?: string; email?: string }
-    if (!apiKey || !email) return reply.code(400).send({ error: 'apiKey and email required' })
-    const res = await fetch(`${SL_BASE}/mailboxes`, {
-      method: 'POST',
-      headers: { Authentication: apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-      signal: AbortSignal.timeout(SL_TIMEOUT),
-    }).catch(() => null)
-    if (!res || !res.ok) return reply.code(res?.status ?? 502).send({ error: `SimpleLogin returned ${res?.status ?? 'error'}` })
-    const data = await res.json() as { id?: number; email?: string; verified?: boolean }
-    return reply.send({ id: data.id ?? null, email: data.email ?? email, verified: Boolean(data.verified) })
-  })
-
-  // Route an alias's replies to a delegate mailbox (by email). Returns whether it was
-  // routed (a verified mailbox matched) so the UI can prompt verification otherwise.
-  app.put('/simplelogin/alias/:aliasId/mailbox', { preHandler: requireAuth }, async (req, reply) => {
-    const aliasId = parseAliasId((req.params as { aliasId: string }).aliasId)
-    if (aliasId === null) return reply.code(400).send({ error: 'aliasId must be a positive integer' })
-    const { apiKey, mailbox } = req.body as { apiKey?: string; mailbox?: string }
-    if (!apiKey || !mailbox) return reply.code(400).send({ error: 'apiKey and mailbox required' })
-
-    const listRes = await fetch(`${SL_BASE}/mailboxes`, { headers: { Authentication: apiKey }, signal: AbortSignal.timeout(SL_TIMEOUT) }).catch(() => null)
-    if (!listRes || !listRes.ok) return reply.code(502).send({ error: 'Could not list mailboxes' })
-    const { mailboxes = [] } = await listRes.json() as { mailboxes?: { id: number; email: string; verified: boolean }[] }
-    const target = mailboxes.find(m => m.email.toLowerCase() === mailbox.toLowerCase())
-
-    if (!target) return reply.send({ routed: false, verified: false, reason: 'mailbox_absent' })
-    if (!target.verified) return reply.send({ routed: false, verified: false, reason: 'mailbox_unverified' })
-
-    const putRes = await fetch(`${SL_BASE}/aliases/${aliasId}`, {
-      method: 'PUT',
-      headers: { Authentication: apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mailbox_ids: [target.id] }),
-      signal: AbortSignal.timeout(SL_TIMEOUT),
-    }).catch(() => null)
-    if (!putRes || !putRes.ok) return reply.code(putRes?.status ?? 502).send({ error: 'Could not route alias' })
-    return reply.send({ routed: true, verified: true })
-  })
-
   // Delete an alias by its numeric ID.
   app.delete('/simplelogin/alias/:aliasId', { preHandler: requireAuth }, async (req, reply) => {
     const aliasId = parseAliasId((req.params as { aliasId: string }).aliasId)

@@ -99,10 +99,6 @@ export const api = {
       req<{ aliases: { id: number; alias: string }[] }>('POST', '/simplelogin/aliases/nyx', { apiKey }),
     purgeAliases: (apiKey: string, aliasIds: number[]) =>
       req<{ deleted: number }>('POST', '/simplelogin/aliases/purge', { apiKey, aliasIds }),
-    addMailbox: (apiKey: string, email: string) =>
-      req<{ id: number | null; email: string; verified: boolean }>('POST', '/simplelogin/mailboxes/add', { apiKey, email }),
-    routeAlias: (apiKey: string, aliasId: number, mailbox: string) =>
-      req<{ routed: boolean; verified: boolean; reason?: string }>('PUT', `/simplelogin/alias/${aliasId}/mailbox`, { apiKey, mailbox }),
   },
 
   // Invitations

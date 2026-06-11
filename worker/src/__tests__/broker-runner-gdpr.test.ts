@@ -25,8 +25,10 @@ function makeDb() {
     CREATE TABLE scan_events (id TEXT PRIMARY KEY, job_id TEXT, event_type TEXT,
       payload TEXT, created_at TEXT, broadcast INTEGER DEFAULT 0);
     CREATE TABLE mail_log (id TEXT PRIMARY KEY, profile_id TEXT, broker_id TEXT, sent_at TEXT NOT NULL);
+    CREATE TABLE profiles (id TEXT PRIMARY KEY, user_id TEXT, label TEXT, encrypted_pii TEXT, created_at TEXT, redirect_email TEXT);
     INSERT INTO brokers (id,name,country,type,script_file,opt_out_email,gdpr_lang)
       VALUES ('pagesjaunes','Pages Jaunes','FR','auto',NULL,'dpo@solocal.com','fr');
+    INSERT INTO profiles (id, user_id, label) VALUES ('p1','u1','Test');
     INSERT INTO opt_out_requests (id, profile_id, broker_id) VALUES ('oo1','p1','pagesjaunes');
   `)
   return db
@@ -55,5 +57,13 @@ describe('runBroker — GDPR email dispatch', () => {
     const row = db.prepare('SELECT status, confirmation_pattern FROM opt_out_requests WHERE id=?').get('oo1') as { status: string; confirmation_pattern: string | null }
     expect(row.status).toBe('awaiting_email')
     expect(row.confirmation_pattern).toBe('solocal\\.com')
+  })
+
+  it('uses the profile redirect_email as Reply-To when set', async () => {
+    const db = makeDb()
+    db.prepare('UPDATE profiles SET redirect_email=? WHERE id=?').run('delegate@autre.fr', 'p1')
+    const { runBroker } = await import('../broker-runner.js')
+    await runBroker(db, 'job1', 'p1', 'pagesjaunes', pii)
+    expect(sendGdprEmail.mock.calls[0][2]).toBe('delegate@autre.fr')
   })
 })

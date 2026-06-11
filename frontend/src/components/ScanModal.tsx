@@ -164,19 +164,10 @@ export function ScanModal({ profileLabel, profileId, defaultRedirectEmail, onCon
     setSubmitting(true)
     setError('')
     try {
-      // Route broker replies to a delegate mailbox when requested (Feature A).
+      // Reply redirection: persist the (possibly edited) delegate address on the profile.
+      // The worker sets it as the GDPR email's Reply-To, so brokers reply straight to the
+      // delegate's normal inbox — no SimpleLogin account needed on their side.
       const redirect = redirectEmail.trim()
-      if (redirect && aliasState.status === 'ok' && aliasState.aliasId) {
-        const key = localStorage.getItem(SL_KEY)?.trim()
-        if (key) {
-          const r = await api.simplelogin.routeAlias(key, aliasState.aliasId, redirect).catch(() => null)
-          if (r && !r.routed) {
-            // Not a verified mailbox yet — trigger verification; replies stay on the owner box until confirmed.
-            if (r.reason === 'mailbox_absent') await api.simplelogin.addMailbox(key, redirect).catch(() => {})
-          }
-        }
-      }
-      // Remember the (possibly edited) redirect on the profile for next time.
       if (redirect !== (defaultRedirectEmail ?? '')) {
         await api.profiles.setRedirectEmail(profileId, redirect || null).catch(() => {})
       }
@@ -395,9 +386,8 @@ export function ScanModal({ profileLabel, profileId, defaultRedirectEmail, onCon
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              Les réponses des courtiers sont routées vers cette adresse (mailbox SimpleLogin). Si elle
-              n'est pas encore vérifiée, un mail de vérification lui est envoyé ; en attendant, les
-              réponses restent sur ta boîte. Vide = comportement par défaut.
+              Les réponses des courtiers sont envoyées directement à cette adresse (Reply-To) — aucun
+              compte SimpleLogin requis pour le délégué. Vide = les réponses arrivent sur ton alias habituel.
             </p>
           </div>
 
