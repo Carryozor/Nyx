@@ -67,7 +67,7 @@ export function ProfileDetail() {
 
   const handleScan = async (password: string, opts: ScanOptions) => {
     if (!id) return
-    await api.scans.create(id, password, opts.email, opts.aliasId, opts.audience, opts.brokerIds)
+    await api.scans.create(id, password, opts.email, opts.aliasId, opts.audience, opts.brokerIds, opts.countries)
     setShowScan(false)
     load()
   }

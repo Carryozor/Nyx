@@ -41,7 +41,7 @@ export function Dashboard() {
 
   const handleScan = async (password: string, opts: ScanOptions) => {
     if (!scanProfile) return
-    await api.scans.create(scanProfile.id, password, opts.email, opts.aliasId, opts.audience, opts.brokerIds)
+    await api.scans.create(scanProfile.id, password, opts.email, opts.aliasId, opts.audience, opts.brokerIds, opts.countries)
     setScanProfile(null)
     const updated = await api.scans.list() as ScanJob[]
     setJobs(updated)

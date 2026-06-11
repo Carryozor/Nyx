@@ -139,6 +139,53 @@ it("audience 'both' (default) targets every active auto/semi broker", async () =
   expect(dflt).toBe(both)
 })
 
+async function scanCountries(payload: Record<string, unknown>): Promise<{ country: string }[]> {
+  getDb().prepare('DELETE FROM opt_out_requests WHERE profile_id=?').run(profileId)
+  await app.inject({ method: 'POST', url: '/api/scans', cookies: { nyx_session: sessionCookie }, payload: { profileId, password: 'StrongPass1!', ...payload } })
+  return getDb().prepare(`
+    SELECT b.country FROM opt_out_requests oor JOIN brokers b ON b.id = oor.broker_id WHERE oor.profile_id = ?
+  `).all(profileId) as { country: string }[]
+}
+
+it("countries=['FR','PL'] targets only FR and PL brokers, excluding pan-EU and US", async () => {
+  const rows = await scanCountries({ countries: ['FR', 'PL'] })
+  expect(rows.length).toBeGreaterThan(0)
+  expect(rows.every(r => r.country === 'FR' || r.country === 'PL')).toBe(true)
+  expect(rows.some(r => r.country === 'EU')).toBe(false)
+  expect(rows.some(r => r.country === 'US')).toBe(false)
+})
+
+it("adding 'EU' to the country list pulls in pan-European brokers", async () => {
+  const without = await scanCountries({ countries: ['FR', 'PL'] })
+  const withEu  = await scanCountries({ countries: ['FR', 'PL', 'EU'] })
+  expect(withEu.some(r => r.country === 'EU')).toBe(true)
+  expect(withEu.length).toBeGreaterThan(without.length)
+})
+
+it("countries=['US'] targets only US brokers", async () => {
+  const rows = await scanCountries({ countries: ['US'] })
+  expect(rows.length).toBeGreaterThan(0)
+  expect(rows.every(r => r.country === 'US')).toBe(true)
+})
+
+it('country filter intersects with the audience filter', async () => {
+  const rows = await scanCountries({ countries: ['FR'], audience: 'professional' })
+  expect(rows.length).toBeGreaterThan(0)
+  expect(rows.every(r => r.country === 'FR')).toBe(true)
+})
+
+it('empty/absent countries targets every country (default behaviour)', async () => {
+  const all = await scanCountries({})
+  expect(all.some(r => r.country === 'US')).toBe(true)
+  expect(all.some(r => r.country === 'FR')).toBe(true)
+})
+
+it('explicit brokerIds override the country filter', async () => {
+  const rows = await scanCountries({ countries: ['US'], brokerIds: ['altares'] }) // altares is FR
+  expect(rows).toHaveLength(1)
+  expect(rows[0].country).toBe('FR')
+})
+
 it('persists the resolved broker set in scan_jobs.broker_ids so the worker honours the audience filter', async () => {
   // Regression: worker falls back to ALL auto/semi brokers when broker_ids is NULL,
   // which would silently bypass the audience filter at execution time.

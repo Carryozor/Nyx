@@ -74,8 +74,13 @@ export const api = {
       aliasId?: number | null,
       audience: 'private' | 'professional' | 'both' = 'both',
       brokerIds?: string[],
+      countries?: string[],
     ) =>
-      req('POST', '/scans', { profileId, password, email, aliasId, audience, ...(brokerIds?.length ? { brokerIds } : {}) }),
+      req('POST', '/scans', {
+        profileId, password, email, aliasId, audience,
+        ...(brokerIds?.length ? { brokerIds } : {}),
+        ...(countries?.length ? { countries } : {}),
+      }),
     list:   () => req('GET', '/scans'),
     get:    (id: string) => req('GET', `/scans/${id}`),
   },

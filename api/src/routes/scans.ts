@@ -15,6 +15,7 @@ const createScanSchema = z.object({
   password:   z.string().min(1),
   brokerIds:  z.array(z.string()).min(1).max(100).optional(),
   audience:   z.enum(['private', 'professional', 'both']).default('both'),
+  countries:  z.array(z.string()).max(20).optional(),
   email:      z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
   aliasId:    z.number().int().positive().nullable().optional(),
 })
@@ -33,7 +34,7 @@ export function registerScanRoutes(app: FastifyInstance): void {
     if (!bodyParsed.success) {
       return reply.code(400).send({ error: bodyParsed.error.issues[0]?.message ?? 'Invalid request body' })
     }
-    const { profileId, password, brokerIds, audience, email, aliasId } = bodyParsed.data
+    const { profileId, password, brokerIds, audience, countries, email, aliasId } = bodyParsed.data
 
     const db = getDb()
 
@@ -50,13 +51,24 @@ export function registerScanRoutes(app: FastifyInstance): void {
     const piiKey  = await deriveKey(password, piiBlob.salt)
     const encryptedJobKey = JSON.stringify(encryptJobKey(piiKey, config.WORKER_SECRET))
 
-    // Expert mode (explicit brokerIds) takes precedence over the audience filter.
-    const audienceScopes = AUDIENCE_FILTER[audience]
-    const brokers: BrokerRow[] = brokerIds?.length
-      ? db.prepare(`SELECT * FROM brokers WHERE id IN (${brokerIds.map(() => '?').join(',')}) AND active = 1`).all(...brokerIds) as BrokerRow[]
-      : audienceScopes
-        ? db.prepare(`SELECT * FROM brokers WHERE active = 1 AND type IN ('auto','semi') AND audience IN (${audienceScopes.map(() => '?').join(',')})`).all(...audienceScopes) as BrokerRow[]
-        : db.prepare("SELECT * FROM brokers WHERE active = 1 AND type IN ('auto','semi')").all() as BrokerRow[]
+    // Expert mode (explicit brokerIds) takes precedence over the audience/country filters.
+    let brokers: BrokerRow[]
+    if (brokerIds?.length) {
+      brokers = db.prepare(`SELECT * FROM brokers WHERE id IN (${brokerIds.map(() => '?').join(',')}) AND active = 1`).all(...brokerIds) as BrokerRow[]
+    } else {
+      const conds = ['active = 1', "type IN ('auto','semi')"]
+      const params: string[] = []
+      const audienceScopes = AUDIENCE_FILTER[audience]
+      if (audienceScopes) {
+        conds.push(`audience IN (${audienceScopes.map(() => '?').join(',')})`)
+        params.push(...audienceScopes)
+      }
+      if (countries?.length) {
+        conds.push(`country IN (${countries.map(() => '?').join(',')})`)
+        params.push(...countries)
+      }
+      brokers = db.prepare(`SELECT * FROM brokers WHERE ${conds.join(' AND ')}`).all(...params) as BrokerRow[]
+    }
 
     const jobId      = uuid()
     const created_at = new Date().toISOString()

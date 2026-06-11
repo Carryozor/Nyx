@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Mail, Key, AlertTriangle, CheckCircle2, SlidersHorizontal } from 'lucide-react'
+import { Loader2, Mail, Key, AlertTriangle, CheckCircle2, SlidersHorizontal, Globe } from 'lucide-react'
 import { api } from '../api/client.js'
+import { REGION_CODES, PAN_EU_TAG, countryLabel, type RegionKey } from '../lib/regions.js'
 import type { Broker, BrokerAudience } from '../types.js'
 
 const SL_KEY = 'nyx_simplelogin_key'
@@ -10,7 +11,15 @@ export interface ScanOptions {
   aliasId?: number | null
   audience: BrokerAudience
   brokerIds?: string[]
+  countries?: string[]
 }
+
+const REGION_BUTTONS: { key: RegionKey; label: string }[] = [
+  { key: 'all',    label: 'Tout' },
+  { key: 'ue',     label: 'Union Européenne' },
+  { key: 'europe', label: 'Europe' },
+  { key: 'us',     label: 'US' },
+]
 
 interface Props {
   profileLabel: string
@@ -56,6 +65,8 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
   const [expertMode, setExpertMode] = useState(false)
   const [brokers, setBrokers]     = useState<Broker[] | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  // Empty set = no country filter (all countries).
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set())
   const passwordRef = useRef<HTMLInputElement>(null)
   const aliasCreatedRef = useRef<{ aliasId: number } | null>(null)
   const hasSLKey = Boolean(localStorage.getItem(SL_KEY)?.trim())
@@ -74,9 +85,8 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
       .catch(err => setAliasState({ status: 'error', message: err instanceof Error ? err.message : String(err) }))
   }, [])
 
-  // Lazily load the broker list the first time expert mode is opened.
+  // Load the broker list on mount — used both for the country selector and expert mode.
   useEffect(() => {
-    if (!expertMode || brokers !== null) return
     api.brokers.list()
       .then(rows => {
         const targetable = (rows as Broker[]).filter(b => b.type !== 'manual')
@@ -84,7 +94,37 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
         setSelectedIds(new Set(targetable.map(b => b.id)))
       })
       .catch(() => setBrokers([]))
-  }, [expertMode, brokers])
+  }, [])
+
+  // Individual countries offered as checkboxes (the pan-EU tag is region-only).
+  const availableCountries = brokers
+    ? Array.from(new Set(brokers.map(b => b.country).filter(c => c !== PAN_EU_TAG))).sort()
+    : []
+
+  const applyRegion = (key: RegionKey) => {
+    if (key === 'all') return setSelectedCountries(new Set())
+    // Only select region countries that actually exist in the broker set (+ pan-EU tag).
+    const present = new Set(brokers?.map(b => b.country) ?? [])
+    setSelectedCountries(new Set(REGION_CODES[key].filter(c => present.has(c))))
+  }
+
+  const toggleCountry = (code: string) => {
+    setSelectedCountries(prev => {
+      const next = new Set(prev)
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
+      return next
+    })
+  }
+
+  // Whether a region button reflects the current country selection (for highlighting).
+  const regionActive = (key: RegionKey): boolean => {
+    if (key === 'all') return selectedCountries.size === 0
+    const present = REGION_CODES[key].filter(c => brokers?.some(b => b.country === c))
+    return selectedCountries.size > 0
+      && present.every(c => selectedCountries.has(c))
+      && Array.from(selectedCountries).every(c => REGION_CODES[key].includes(c))
+  }
 
   const effectiveEmail =
     aliasState.status === 'ok' ? aliasState.alias :
@@ -124,6 +164,7 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
         aliasId: effectiveAliasId,
         audience,
         brokerIds: expertMode ? Array.from(selectedIds) : undefined,
+        countries: !expertMode && selectedCountries.size ? Array.from(selectedCountries) : undefined,
       })
       aliasCreatedRef.current = null  // submitted — don't clean up
     } catch (err) {
@@ -180,6 +221,55 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Country / region selector */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5 flex items-center gap-1.5">
+              <Globe size={12} /> Pays ciblés
+            </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {REGION_BUTTONS.map(r => {
+                const active = regionActive(r.key)
+                return (
+                  <button
+                    key={r.key}
+                    type="button"
+                    onClick={() => applyRegion(r.key)}
+                    disabled={expertMode}
+                    className={`px-2.5 py-1 rounded-lg border text-xs transition disabled:opacity-40 ${
+                      active ? 'border-brand-500 bg-brand-500/10 text-white' : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                )
+              })}
+            </div>
+            {availableCountries.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {availableCountries.map(code => {
+                  const checked = selectedCountries.has(code)
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => toggleCountry(code)}
+                      disabled={expertMode}
+                      title={countryLabel(code)}
+                      className={`px-2 py-0.5 rounded-md border text-[11px] transition disabled:opacity-40 ${
+                        checked ? 'border-brand-500 bg-brand-500/10 text-white' : 'border-slate-700 text-slate-400 hover:bg-slate-800'
+                      }`}
+                    >
+                      {code}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500 mt-1">
+              {selectedCountries.size === 0 ? 'Tous les pays seront contactés.' : `${selectedCountries.size} sélection(s) — les autres pays sont exclus.`}
+            </p>
           </div>
 
           {/* Expert mode */}
