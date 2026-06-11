@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Calendar, ChevronRight, Clock } from 'lucide-react'
 import { api } from '../api/client.js'
 import { PasswordModal } from '../components/PasswordModal.js'
+import { SCAN_INTERVALS, intervalLabel } from '../lib/intervals.js'
 import type { Profile, ScanSchedule } from '../types.js'
 
 interface ProfileWithSchedule {
@@ -10,7 +11,7 @@ interface ProfileWithSchedule {
   schedule: ScanSchedule | null
 }
 
-const INTERVALS = [7, 14, 30, 60, 90]
+const INTERVALS = SCAN_INTERVALS
 
 export function Schedules() {
   const [items, setItems]           = useState<ProfileWithSchedule[]>([])
@@ -105,7 +106,7 @@ export function Schedules() {
                       className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
                       {INTERVALS.map(d => (
-                        <option key={d} value={d}>{d} days</option>
+                        <option key={d} value={d}>{intervalLabel(d)}</option>
                       ))}
                     </select>
                   </div>

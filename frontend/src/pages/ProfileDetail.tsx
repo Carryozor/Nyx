@@ -5,6 +5,7 @@ import { api } from '../api/client.js'
 import { useAuthStore } from '../store/auth.js'
 import { hasRank } from '../lib/roles.js'
 import { ProfileShares } from '../components/ProfileShares.js'
+import { SCAN_INTERVALS, intervalLabel } from '../lib/intervals.js'
 import { PasswordModal } from '../components/PasswordModal.js'
 import { ScanModal, type ScanOptions } from '../components/ScanModal.js'
 import { ScanRow } from '../components/ScanRow.js'
@@ -306,8 +307,8 @@ export function ProfileDetail() {
                 onChange={e => handleIntervalChange(Number(e.target.value))}
                 className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
-                {[7, 14, 30, 60, 90].map(d => (
-                  <option key={d} value={d}>{d} days</option>
+                {SCAN_INTERVALS.map(d => (
+                  <option key={d} value={d}>{intervalLabel(d)}</option>
                 ))}
               </select>
             </div>

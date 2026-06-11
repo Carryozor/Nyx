@@ -70,7 +70,7 @@ describe('Schedules page', () => {
     renderSchedules()
     await waitFor(() => {
       expect(screen.getByText(/active/i)).toBeInTheDocument()
-      expect(screen.getByText(/30 days/i)).toBeInTheDocument()
+      expect(screen.getByText(/30 jours/i)).toBeInTheDocument()
     })
   })
 })
