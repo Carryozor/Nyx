@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/client.js'
 import { requireAuth } from '../auth/middleware.js'
+import { requireProfileRead } from '../auth/access.js'
 import type { OptOutRequestRow } from '../types.js'
 
 export function registerOptOutRoutes(app: FastifyInstance): void {
@@ -11,9 +12,7 @@ export function registerOptOutRoutes(app: FastifyInstance): void {
 
     const profile = db.prepare('SELECT user_id FROM profiles WHERE id = ?').get(id) as { user_id: string } | undefined
     if (!profile) return reply.code(404).send({ error: 'Profile not found' })
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireProfileRead(db, req.user, id, reply)) return
 
     const rows = db.prepare(`
       SELECT oor.*, b.name as broker_name, b.type as broker_type,
@@ -40,10 +39,7 @@ export function registerOptOutRoutes(app: FastifyInstance): void {
 
     if (!row) return reply.code(404).send({ error: 'Not found' })
 
-    const profile = db.prepare('SELECT user_id FROM profiles WHERE id = ?').get(row.profile_id) as { user_id: string }
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireProfileRead(db, req.user, row.profile_id, reply)) return
 
     return reply.send(row)
   })

@@ -25,6 +25,17 @@ export function encryptJobKey(piiKey: Buffer, workerSecret: string): EncryptedBl
   return encrypt(piiKey.toString('hex'), key, salt)
 }
 
+/**
+ * Encrypt arbitrary data with a key derived from workerSecret (not the user's
+ * password). Used for background-service credentials (e.g. the SimpleLogin API key)
+ * that the worker must decrypt continuously, independent of any transient scan job key.
+ */
+export function encryptWithWorkerSecret(plaintext: string, workerSecret: string): EncryptedBlob {
+  const salt = crypto.randomBytes(32).toString('hex')
+  const key  = deriveWorkerKey(workerSecret, salt)
+  return encrypt(plaintext, key, salt)
+}
+
 const ALGORITHM = 'aes-256-gcm'
 
 export function encrypt(plaintext: string, key: Buffer, salt: string): EncryptedBlob {

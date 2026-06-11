@@ -5,7 +5,8 @@ import { getDb } from '../db/client.js'
 import { verifyPassword } from '../crypto/argon.js'
 import { deriveKey, generateSalt } from '../crypto/kdf.js'
 import { encrypt, decrypt } from '../crypto/aes.js'
-import { requireAuth } from '../auth/middleware.js'
+import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireProfileRead, requireOwnerOrAdmin } from '../auth/access.js'
 import type { UserRow, ProfileRow, ProfilePII } from '../types.js'
 
 const AddressSchema = z.object({
@@ -14,6 +15,13 @@ const AddressSchema = z.object({
   state:   z.string().max(50).optional(),
   zip:     z.string().max(20).optional(),
   country: z.string().length(2),
+})
+
+const CompanySchema = z.object({
+  name:      z.string().min(1).max(200),
+  siren:     z.string().regex(/^\d{9}$/, 'siren must be 9 digits').optional(),
+  siret:     z.string().regex(/^\d{14}$/, 'siret must be 14 digits').optional(),
+  legalForm: z.string().max(100).optional(),
 })
 
 const PiiSchema = z.object({
@@ -25,6 +33,7 @@ const PiiSchema = z.object({
   aliases:           z.array(z.string().max(100)).max(10).optional(),
   currentAddress:    AddressSchema,
   previousAddresses: z.array(AddressSchema).max(5).optional(),
+  company:           CompanySchema.optional(),
 })
 
 export function registerProfileRoutes(app: FastifyInstance): void {
@@ -33,11 +42,17 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     const db = getDb()
     const rows: ProfileRow[] = req.user.role === 'admin'
       ? db.prepare('SELECT id, user_id, label, created_at FROM profiles ORDER BY created_at DESC').all() as ProfileRow[]
-      : db.prepare('SELECT id, user_id, label, created_at FROM profiles WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id) as ProfileRow[]
+      : db.prepare(`
+          SELECT DISTINCT p.id, p.user_id, p.label, p.created_at
+          FROM profiles p
+          LEFT JOIN profile_access pa ON pa.profile_id = p.id AND pa.user_id = ?
+          WHERE p.user_id = ? OR pa.user_id IS NOT NULL
+          ORDER BY p.created_at DESC
+        `).all(req.user.id, req.user.id) as ProfileRow[]
     return reply.send(rows)
   })
 
-  app.post('/profiles', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/profiles', { preHandler: requireRole('manager') }, async (req, reply) => {
     const { label, password, pii } = req.body as {
       label:    string
       password: string
@@ -54,11 +69,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     }
 
     const db = getDb()
-    if (req.user.role === 'user') {
-      const count = (db.prepare('SELECT count(*) as n FROM profiles WHERE user_id = ?').get(req.user.id) as { n: number }).n
-      if (count >= 1) return reply.code(403).send({ error: 'Basic users can only have 1 profile' })
-    }
-
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
     if (!(await verifyPassword(password, user.password_hash))) {
       return reply.code(401).send({ error: 'Wrong password' })
@@ -83,9 +93,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     const profile = db.prepare('SELECT id, user_id, label, created_at FROM profiles WHERE id = ?').get(id) as ProfileRow | undefined
 
     if (!profile) return reply.code(404).send({ error: 'Profile not found' })
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireProfileRead(db, req.user, id, reply)) return
     return reply.send(profile)
   })
 
@@ -98,9 +106,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     const db = getDb()
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as ProfileRow | undefined
     if (!profile) return reply.code(404).send({ error: 'Profile not found' })
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireOwnerOrAdmin(db, req.user, id, reply)) return
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
     if (!(await verifyPassword(password, user.password_hash))) {
@@ -129,9 +135,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     const db = getDb()
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as ProfileRow | undefined
     if (!profile) return reply.code(404).send({ error: 'Not found' })
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireOwnerOrAdmin(db, req.user, id, reply)) return
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
     if (!(await verifyPassword(password, user.password_hash))) {
@@ -162,9 +166,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     const profile = db.prepare('SELECT user_id FROM profiles WHERE id = ?').get(id) as { user_id: string } | undefined
 
     if (!profile) return reply.code(404).send({ error: 'Not found' })
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireOwnerOrAdmin(db, req.user, id, reply)) return
 
     db.prepare('DELETE FROM profiles WHERE id = ?').run(id)
     return reply.code(204).send()

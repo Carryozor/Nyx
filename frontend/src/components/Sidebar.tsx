@@ -1,29 +1,25 @@
 import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, Users, Shield, Clock, Calendar, BookOpen, Settings, LogOut } from 'lucide-react'
 import { useAuthStore } from '../store/auth.js'
+import { hasRank } from '../lib/roles.js'
 import { NyxLogo } from './NyxLogo.js'
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
 
-  const adminLinks = [
-    { to: '/',           icon: LayoutDashboard, label: 'Dashboard'    },
-    { to: '/profiles',   icon: Users,           label: 'Profiles'     },
-    { to: '/brokers',    icon: Shield,          label: 'Brokers'      },
-    { to: '/schedules',  icon: Calendar,        label: 'Schedules'    },
-    { to: '/history',    icon: Clock,           label: 'History'      },
-    { to: '/guide',      icon: BookOpen,        label: 'Manual Guide' },
-    { to: '/settings',   icon: Settings,        label: 'Settings'     },
-  ]
+  // manager+ get full profile management; viewer/editor get a read-focused nav.
+  const canManageProfiles = hasRank(user?.role, 'manager')
+  const isAdmin = user?.role === 'admin'
 
-  const userLinks = [
-    { to: '/',        icon: LayoutDashboard, label: 'My Profile' },
-    { to: '/brokers', icon: Shield,          label: 'My opt-outs' },
-    { to: '/history', icon: Clock,           label: 'History' },
-    { to: '/guide',   icon: BookOpen,        label: 'Manual Guide' },
-  ]
-
-  const links = user?.role === 'admin' ? adminLinks : userLinks
+  const links = [
+    { to: '/',          icon: LayoutDashboard, label: canManageProfiles ? 'Dashboard' : 'My Profiles', show: true },
+    { to: '/profiles',  icon: Users,           label: 'Profiles',     show: canManageProfiles },
+    { to: '/brokers',   icon: Shield,          label: 'Brokers',      show: true },
+    { to: '/schedules', icon: Calendar,        label: 'Schedules',    show: canManageProfiles },
+    { to: '/history',   icon: Clock,           label: 'History',      show: true },
+    { to: '/guide',     icon: BookOpen,        label: 'Manual Guide', show: true },
+    { to: '/settings',  icon: Settings,        label: 'Settings',     show: isAdmin },
+  ].filter(l => l.show)
 
   return (
     <aside className="w-56 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-screen sticky top-0">

@@ -46,3 +46,13 @@ export function decryptJobKey(encryptedJobKey: string, workerSecret: string): Bu
   const hexKey = decrypt(blob, key)
   return Buffer.from(hexKey, 'hex')
 }
+
+/**
+ * Decrypt data that was encrypted with encryptWithWorkerSecret (api side):
+ * background-service credentials the worker reads continuously, independent of
+ * any scan job key (which is purged after each scan).
+ */
+export function decryptWithWorkerSecret(blob: EncryptedBlob, workerSecret: string): string {
+  const key = deriveWorkerKey(workerSecret, blob.salt)
+  return decrypt(blob, key)
+}

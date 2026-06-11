@@ -24,11 +24,11 @@ beforeEach(async () => {
   await app.ready()
 
   await app.inject({
-    method: 'POST', url: '/auth/register',
+    method: 'POST', url: '/api/auth/register',
     payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
   })
   const login = await app.inject({
-    method: 'POST', url: '/auth/login',
+    method: 'POST', url: '/api/auth/login',
     payload: { email: 'admin@nyx.local', password: 'StrongPass1!' },
   })
   sessionCookie = login.cookies.find(c => c.name === 'nyx_session')!.value
@@ -42,7 +42,7 @@ afterEach(async () => {
 describe('POST /profiles', () => {
   it('creates a profile and stores PII encrypted (not plaintext)', async () => {
     const res = await app.inject({
-      method: 'POST', url: '/profiles',
+      method: 'POST', url: '/api/profiles',
       cookies: { nyx_session: sessionCookie },
       payload: { label: 'Alice', password: 'StrongPass1!', pii: PII },
     })
@@ -59,7 +59,7 @@ describe('POST /profiles', () => {
 
   it('rejects a wrong password', async () => {
     const res = await app.inject({
-      method: 'POST', url: '/profiles',
+      method: 'POST', url: '/api/profiles',
       cookies: { nyx_session: sessionCookie },
       payload: { label: 'Alice', password: 'WrongPassword', pii: PII },
     })
@@ -67,17 +67,69 @@ describe('POST /profiles', () => {
   })
 })
 
+describe('professional profile (company block)', () => {
+  const PRO_PII = {
+    ...PII,
+    company: { name: 'ACME SARL', siren: '123456789', siret: '12345678900012', legalForm: 'SARL' },
+  }
+
+  it('accepts a valid company block and round-trips it through decrypt', async () => {
+    const create = await app.inject({
+      method: 'POST', url: '/api/profiles',
+      cookies: { nyx_session: sessionCookie },
+      payload: { label: 'Pro', password: 'StrongPass1!', pii: PRO_PII },
+    })
+    expect(create.statusCode).toBe(201)
+    const profileId = create.json().id
+
+    const res = await app.inject({
+      method: 'POST', url: `/api/profiles/${profileId}/decrypt`,
+      cookies: { nyx_session: sessionCookie },
+      payload: { password: 'StrongPass1!' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().pii.company).toEqual(PRO_PII.company)
+  })
+
+  it('rejects a SIREN that is not 9 digits', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/profiles',
+      cookies: { nyx_session: sessionCookie },
+      payload: { label: 'Bad', password: 'StrongPass1!', pii: { ...PII, company: { name: 'X', siren: '12' } } },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('rejects a SIRET that is not 14 digits', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/profiles',
+      cookies: { nyx_session: sessionCookie },
+      payload: { label: 'Bad', password: 'StrongPass1!', pii: { ...PII, company: { name: 'X', siret: '999' } } },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('requires a company name when the company block is present', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/profiles',
+      cookies: { nyx_session: sessionCookie },
+      payload: { label: 'Bad', password: 'StrongPass1!', pii: { ...PII, company: { siren: '123456789' } } },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+})
+
 describe('POST /profiles/:id/decrypt', () => {
   it('returns decrypted PII with correct password', async () => {
     const create = await app.inject({
-      method: 'POST', url: '/profiles',
+      method: 'POST', url: '/api/profiles',
       cookies: { nyx_session: sessionCookie },
       payload: { label: 'Alice', password: 'StrongPass1!', pii: PII },
     })
     const profileId = create.json().id
 
     const res = await app.inject({
-      method: 'POST', url: `/profiles/${profileId}/decrypt`,
+      method: 'POST', url: `/api/profiles/${profileId}/decrypt`,
       cookies: { nyx_session: sessionCookie },
       payload: { password: 'StrongPass1!' },
     })
@@ -89,12 +141,12 @@ describe('POST /profiles/:id/decrypt', () => {
 describe('GET /profiles', () => {
   it('returns profiles list (no PII)', async () => {
     await app.inject({
-      method: 'POST', url: '/profiles',
+      method: 'POST', url: '/api/profiles',
       cookies: { nyx_session: sessionCookie },
       payload: { label: 'Alice', password: 'StrongPass1!', pii: PII },
     })
     const res = await app.inject({
-      method: 'GET', url: '/profiles',
+      method: 'GET', url: '/api/profiles',
       cookies: { nyx_session: sessionCookie },
     })
     expect(res.statusCode).toBe(200)

@@ -5,3 +5,6 @@ dist/
 *.db-shm
 .env
 coverage/
+
+# Local superpowers skill state
+.superpowers/

@@ -5,6 +5,13 @@ export interface EncryptedBlob {
   authTag: string
 }
 
+export interface CompanyInfo {
+  name: string
+  siren?: string
+  siret?: string
+  legalForm?: string
+}
+
 export interface ProfilePII {
   firstName: string
   lastName: string
@@ -14,6 +21,7 @@ export interface ProfilePII {
   aliases?: string[]
   currentAddress: Address
   previousAddresses?: Address[]
+  company?: CompanyInfo
 }
 
 export interface Address {
@@ -50,6 +58,7 @@ export interface BrokerRow {
   script_file: string | null
   manual_guide: string | null
   active: number
+  audience: 'private' | 'professional' | 'both'
 }
 
 export interface ScanJobRow {
@@ -58,6 +67,7 @@ export interface ScanJobRow {
   broker_ids: string | null
   status: string
   encrypted_job_key: string
+  confirmation_email: string | null
   created_at: string
   started_at: string | null
   finished_at: string | null
@@ -90,6 +100,7 @@ export interface InvitationRow {
   created_by: string
   expires_at: string
   used_at: string | null
+  role: string
 }
 
 export interface ScanScheduleRow {
@@ -111,10 +122,20 @@ export interface ScanEventRow {
   broadcast: number
 }
 
+export type Role = 'admin' | 'manager' | 'editor' | 'viewer'
+
 export interface AuthUser {
   id: string
   email: string
-  role: 'admin' | 'user'
+  role: Role
+}
+
+export interface ProfileAccessRow {
+  id: string
+  profile_id: string
+  user_id: string
+  granted_by: string | null
+  created_at: string
 }
 
 declare module 'fastify' {

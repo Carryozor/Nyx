@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ChevronLeft, Play, CheckCircle2, Clock, AlertTriangle, XCircle, Edit2, Save, X, Calendar } from 'lucide-react'
 import { api } from '../api/client.js'
+import { useAuthStore } from '../store/auth.js'
+import { hasRank } from '../lib/roles.js'
+import { ProfileShares } from '../components/ProfileShares.js'
 import { PasswordModal } from '../components/PasswordModal.js'
-import { ScanModal } from '../components/ScanModal.js'
+import { ScanModal, type ScanOptions } from '../components/ScanModal.js'
 import { ScanRow } from '../components/ScanRow.js'
 import { BrokerReportPanel } from '../components/BrokerReportPanel.js'
 import { StatusBadge } from '../components/StatusBadge.js'
@@ -14,6 +17,7 @@ const LABEL = 'block text-sm text-slate-400 mb-1'
 
 export function ProfileDetail() {
   const { id }                        = useParams<{ id: string }>()
+  const { user }                      = useAuthStore()
   const [profile, setProfile]         = useState<Profile | null>(null)
   const [optOuts, setOptOuts]         = useState<OptOutRequest[]>([])
   const [jobs, setJobs]               = useState<ScanJob[]>([])
@@ -61,9 +65,9 @@ export function ProfileDetail() {
 
   useEffect(() => { load() }, [id])
 
-  const handleScan = async (password: string, email?: string, aliasId?: number | null) => {
+  const handleScan = async (password: string, opts: ScanOptions) => {
     if (!id) return
-    await api.scans.create(id, password, email, aliasId)
+    await api.scans.create(id, password, opts.email, opts.aliasId, opts.audience, opts.brokerIds)
     setShowScan(false)
     load()
   }
@@ -130,6 +134,9 @@ export function ProfileDetail() {
   if (error)   return <div className="p-8 text-red-400">{error}</div>
   if (!profile) return <div className="p-8 text-slate-400">Profile not found.</div>
 
+  const isOwnerOrAdmin = user?.role === 'admin' || profile.user_id === user?.id
+  const canScan        = isOwnerOrAdmin || hasRank(user?.role, 'editor')
+
   if (showEdit && editPii) {
     return (
       <div className="p-8 max-w-2xl">
@@ -160,6 +167,32 @@ export function ProfileDetail() {
           </div>
           <div><label className={LABEL}>Email for opt-out confirmations</label>
             <input type="email" value={editPii.email ?? ''} onChange={e => setEditPii({...editPii, email: e.target.value || undefined})} className={FIELD} placeholder="confirmations@example.com" /></div>
+
+          <hr className="border-slate-700" />
+          <h3 className="text-sm font-medium text-slate-300">
+            Professionnel <span className="text-slate-500 font-normal">(optionnel — pour les courtiers B2B)</span>
+          </h3>
+          <div><label className={LABEL}>Raison sociale</label>
+            <input type="text" value={editPii.company?.name ?? ''}
+              onChange={e => { const v = e.target.value; setEditPii(prev => prev && ({...prev, company: v ? {...prev.company, name: v} : undefined})) }}
+              className={FIELD} placeholder="ACME SARL" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={LABEL}>SIREN <span className="text-slate-500">(9 chiffres)</span></label>
+              <input type="text" inputMode="numeric" value={editPii.company?.siren ?? ''}
+                disabled={!editPii.company?.name}
+                onChange={e => { const v = e.target.value; setEditPii(prev => prev?.company ? {...prev, company: {...prev.company, siren: v || undefined}} : prev) }}
+                className={`${FIELD} disabled:opacity-40`} placeholder="123456789" /></div>
+            <div><label className={LABEL}>SIRET <span className="text-slate-500">(14 chiffres)</span></label>
+              <input type="text" inputMode="numeric" value={editPii.company?.siret ?? ''}
+                disabled={!editPii.company?.name}
+                onChange={e => { const v = e.target.value; setEditPii(prev => prev?.company ? {...prev, company: {...prev.company, siret: v || undefined}} : prev) }}
+                className={`${FIELD} disabled:opacity-40`} placeholder="12345678900012" /></div>
+          </div>
+          <div><label className={LABEL}>Forme juridique</label>
+            <input type="text" value={editPii.company?.legalForm ?? ''}
+              disabled={!editPii.company?.name}
+              onChange={e => { const v = e.target.value; setEditPii(prev => prev?.company ? {...prev, company: {...prev.company, legalForm: v || undefined}} : prev) }}
+              className={`${FIELD} disabled:opacity-40`} placeholder="SARL, SAS, EI…" /></div>
 
           <hr className="border-slate-700" />
           <h3 className="text-sm font-medium text-slate-300">Current address</h3>
@@ -208,18 +241,22 @@ export function ProfileDetail() {
           <h1 className="text-2xl font-bold text-white">{profile.label}</h1>
           <p className="text-xs text-slate-500 mt-0.5">Created {new Date(profile.created_at).toLocaleDateString()}</p>
         </div>
-        <button
-          onClick={() => setShowDecryptForEdit(true)}
-          className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg text-sm transition">
-          <Edit2 size={14} /> Edit
-        </button>
-        <button
-          onClick={() => setShowScan(true)}
-          disabled={!!activeJob}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-40">
-          <Play size={14} />
-          {activeJob ? 'Scan in progress…' : 'Scan now'}
-        </button>
+        {isOwnerOrAdmin && (
+          <button
+            onClick={() => setShowDecryptForEdit(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg text-sm transition">
+            <Edit2 size={14} /> Edit
+          </button>
+        )}
+        {canScan && (
+          <button
+            onClick={() => setShowScan(true)}
+            disabled={!!activeJob}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-40">
+            <Play size={14} />
+            {activeJob ? 'Scan in progress…' : 'Scan now'}
+          </button>
+        )}
       </div>
 
       {/* KPIs */}
@@ -285,6 +322,9 @@ export function ProfileDetail() {
           </p>
         )}
       </div>
+
+      {/* Sharing — owner/admin only */}
+      {isOwnerOrAdmin && id && <ProfileShares profileId={id} />}
 
       {/* Scan history — expandable with live progress */}
       {jobs.length > 0 && (

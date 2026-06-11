@@ -1,5 +1,5 @@
 import type { BrokerScriptFn } from './_types.js'
-import { setup, humanDelay, screenshot, hasCaptcha, sleep, stateAbbr, fillAge } from './_helpers.js'
+import { setup, humanDelay, screenshot, hasCaptcha, sleep, stateAbbr, fillAge, classifySubmitResult } from './_helpers.js'
 
 // SearchQuarry uses the same InfoPay backend as RecordsFinder
 export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
@@ -48,5 +48,5 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   await page.locator('button[type="submit"], input[type="submit"], button:has-text("Remove"), button:has-text("Opt Out"), button:has-text("Search")').first().click().catch(() => {})
   await sleep(2000)
   await screenshot(page, screenshotDir, 'done')
-  return { status: 'awaiting_email', confirmationPattern: 'searchquarry' }
+  return classifySubmitResult(page, 'searchquarry')
 }

@@ -1,7 +1,16 @@
+export type Role = 'admin' | 'manager' | 'editor' | 'viewer'
+
 export interface User {
   id: string
   email: string
-  role: 'admin' | 'user'
+  role: Role
+}
+
+export interface ProfileShare {
+  user_id: string
+  email: string
+  role: Role
+  created_at: string
 }
 
 export interface Profile {
@@ -9,6 +18,13 @@ export interface Profile {
   user_id: string
   label: string
   created_at: string
+}
+
+export interface CompanyInfo {
+  name: string
+  siren?: string
+  siret?: string
+  legalForm?: string
 }
 
 export interface ProfilePII {
@@ -20,7 +36,10 @@ export interface ProfilePII {
   aliases?: string[]
   currentAddress: Address
   previousAddresses?: Address[]
+  company?: CompanyInfo
 }
+
+export type BrokerAudience = 'private' | 'professional' | 'both'
 
 export interface Address {
   street: string
@@ -39,6 +58,7 @@ export interface Broker {
   script_file: string | null
   manual_guide: string | null
   active: number
+  audience: BrokerAudience
 }
 
 export interface OptOutRequest {
@@ -87,6 +107,7 @@ export interface Invitation {
   email: string
   expires_at: string
   used_at: string | null
+  role?: Role
 }
 
 export interface ScanSchedule {

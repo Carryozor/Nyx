@@ -18,26 +18,17 @@ beforeEach(async () => {
   await app.ready()
   await app.listen({ port: 3099, host: '127.0.0.1' })
 
-  await app.inject({ method: 'POST', url: '/auth/register',
-    payload: { email: 'admin@nyx.local', password: 'StrongPass1!' } })
-  await app.inject({ method: 'POST', url: '/auth/login',
-    payload: { email: 'admin@nyx.local', password: 'StrongPass1!' } })
-
-  const meRes = await app.inject({ method: 'GET', url: '/auth/me',
-    headers: { cookie: (await app.inject({ method: 'POST', url: '/auth/login',
-      payload: { email: 'admin@nyx.local', password: 'StrongPass1!' } })).headers['set-cookie'] as string }
-  })
-  const me = meRes.json()
   const { signToken } = await import('../auth/jwt.js')
-  jwtToken = signToken({ id: me.id, email: me.email, role: me.role })
+  jwtToken = signToken({ id: 'test-user', email: 'admin@nyx.local', role: 'admin' })
 })
 
 afterEach(async () => { await app.close(); closeDb() })
 
 it('accepts a valid JWT and returns auth:ok', async () => {
   await new Promise<void>((resolve, reject) => {
-    const ws = new WebSocket('ws://127.0.0.1:3099/ws')
-    ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: jwtToken })))
+    const ws = new WebSocket('ws://127.0.0.1:3099/ws', {
+      headers: { cookie: `nyx_session=${jwtToken}` },
+    })
     ws.on('message', (raw: Buffer) => {
       const msg = JSON.parse(raw.toString())
       expect(msg.type).toBe('auth:ok')

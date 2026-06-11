@@ -17,7 +17,7 @@ import type { DecryptedPII, OptOutResult } from './_types.js'
 import { humanDelay, screenshot, hasCaptcha, sleep } from './_helpers.js'
 
 const PEOPLECONNECT_BROKERS = [
-  'beenverified', 'checkpeople', 'instantcheckmate', 'intelius',
+  'addresses', 'beenverified', 'checkpeople', 'instantcheckmate', 'intelius',
   'isearch', 'neighborwho', 'peoplelooker', 'peoplesmartus',
   'truthfinder', 'ussearch', 'zabasearch',
 ]

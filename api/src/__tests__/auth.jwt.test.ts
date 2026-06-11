@@ -17,7 +17,7 @@ describe('JWT', () => {
 
   it('throws on a tampered token', async () => {
     const { signToken, verifyToken } = await import('../auth/jwt.js')
-    const token = signToken({ id: 'u1', email: 'a@b.com', role: 'user' })
+    const token = signToken({ id: 'u1', email: 'a@b.com', role: 'manager' })
     expect(() => verifyToken(token + 'x')).toThrow()
   })
 })

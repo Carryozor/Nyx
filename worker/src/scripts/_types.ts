@@ -1,6 +1,13 @@
 import type { Page } from '@playwright/test'
 import type Database from 'better-sqlite3'
 
+export interface CompanyInfo {
+  name: string
+  siren?: string
+  siret?: string
+  legalForm?: string
+}
+
 export interface DecryptedPII {
   firstName: string
   lastName: string
@@ -10,6 +17,7 @@ export interface DecryptedPII {
   aliases?: string[]
   currentAddress: Address
   previousAddresses?: Address[]
+  company?: CompanyInfo
 }
 
 export interface Address {

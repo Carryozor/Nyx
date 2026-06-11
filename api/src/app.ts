@@ -27,6 +27,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   const { registerAuthRoutes }        = await import('./auth/routes.js')
   const { registerProfileRoutes }     = await import('./routes/profiles.js')
+  const { registerShareRoutes }       = await import('./routes/shares.js')
   const { registerInvitationRoutes }  = await import('./routes/invitations.js')
   const { registerBrokerRoutes }      = await import('./routes/brokers.js')
   const { registerScanRoutes }        = await import('./routes/scans.js')
@@ -47,6 +48,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(async (api) => {
     registerAuthRoutes(api)
     registerProfileRoutes(api)
+    registerShareRoutes(api)
     registerInvitationRoutes(api)
     registerBrokerRoutes(api)
     registerScanRoutes(api)

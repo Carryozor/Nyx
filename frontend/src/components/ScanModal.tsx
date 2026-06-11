@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Mail, Key, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Loader2, Mail, Key, AlertTriangle, CheckCircle2, SlidersHorizontal } from 'lucide-react'
 import { api } from '../api/client.js'
+import type { Broker, BrokerAudience } from '../types.js'
 
 const SL_KEY = 'nyx_simplelogin_key'
 
+export interface ScanOptions {
+  email?: string
+  aliasId?: number | null
+  audience: BrokerAudience
+  brokerIds?: string[]
+}
+
 interface Props {
   profileLabel: string
-  onConfirm: (password: string, email?: string, aliasId?: number | null) => Promise<void>
+  onConfirm: (password: string, opts: ScanOptions) => Promise<void>
   onCancel: () => void
 }
 
@@ -16,12 +24,38 @@ type AliasState =
   | { status: 'ok'; alias: string; aliasId: number | null }
   | { status: 'error'; message: string }
 
+const AUDIENCES: { value: BrokerAudience; label: string }[] = [
+  { value: 'private', label: 'Privé' },
+  { value: 'professional', label: 'Professionnel' },
+  { value: 'both', label: 'Les deux' },
+]
+
+const AUDIENCE_BADGE: Record<BrokerAudience, { dot: string; label: string }> = {
+  private:      { dot: 'bg-green-400',  label: 'Privé' },
+  professional: { dot: 'bg-blue-400',   label: 'Pro' },
+  both:         { dot: 'bg-purple-400', label: 'Les 2' },
+}
+
+function AudienceBadge({ audience }: { audience: BrokerAudience }) {
+  const b = AUDIENCE_BADGE[audience]
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 shrink-0">
+      <span className={`w-1.5 h-1.5 rounded-full ${b.dot}`} />
+      {b.label}
+    </span>
+  )
+}
+
 export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
   const [password, setPassword]   = useState('')
   const [manualEmail, setManualEmail] = useState('')
   const [aliasState, setAliasState]   = useState<AliasState>({ status: 'idle' })
   const [submitting, setSubmitting]   = useState(false)
   const [error, setError]         = useState('')
+  const [audience, setAudience]   = useState<BrokerAudience>('both')
+  const [expertMode, setExpertMode] = useState(false)
+  const [brokers, setBrokers]     = useState<Broker[] | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const passwordRef = useRef<HTMLInputElement>(null)
   const aliasCreatedRef = useRef<{ aliasId: number } | null>(null)
   const hasSLKey = Boolean(localStorage.getItem(SL_KEY)?.trim())
@@ -40,12 +74,33 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
       .catch(err => setAliasState({ status: 'error', message: err instanceof Error ? err.message : String(err) }))
   }, [])
 
+  // Lazily load the broker list the first time expert mode is opened.
+  useEffect(() => {
+    if (!expertMode || brokers !== null) return
+    api.brokers.list()
+      .then(rows => {
+        const targetable = (rows as Broker[]).filter(b => b.type !== 'manual')
+        setBrokers(targetable)
+        setSelectedIds(new Set(targetable.map(b => b.id)))
+      })
+      .catch(() => setBrokers([]))
+  }, [expertMode, brokers])
+
   const effectiveEmail =
     aliasState.status === 'ok' ? aliasState.alias :
     manualEmail.trim() || undefined
 
   const effectiveAliasId =
     aliasState.status === 'ok' ? aliasState.aliasId : null
+
+  const toggleBroker = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const handleCancel = () => {
     const created = aliasCreatedRef.current
@@ -56,13 +111,20 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
     onCancel()
   }
 
+  const expertSelectionEmpty = expertMode && selectedIds.size === 0
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!password) return
+    if (!password || expertSelectionEmpty) return
     setSubmitting(true)
     setError('')
     try {
-      await onConfirm(password, effectiveEmail, effectiveAliasId)
+      await onConfirm(password, {
+        email: effectiveEmail,
+        aliasId: effectiveAliasId,
+        audience,
+        brokerIds: expertMode ? Array.from(selectedIds) : undefined,
+      })
       aliasCreatedRef.current = null  // submitted — don't clean up
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')
@@ -72,7 +134,7 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-white mb-1">
           Scan &ldquo;{profileLabel}&rdquo;
         </h2>
@@ -95,6 +157,66 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
               required
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
+          </div>
+
+          {/* Audience selector */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5">Type de courtiers</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {AUDIENCES.map(a => (
+                <button
+                  key={a.value}
+                  type="button"
+                  onClick={() => setAudience(a.value)}
+                  disabled={expertMode}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition disabled:opacity-40 ${
+                    audience === a.value
+                      ? 'border-brand-500 bg-brand-500/10 text-white'
+                      : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${AUDIENCE_BADGE[a.value].dot}`} />
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Expert mode */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setExpertMode(v => !v)}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+            >
+              <SlidersHorizontal size={12} />
+              {expertMode ? 'Masquer le mode expert' : 'Mode expert : choisir les courtiers'}
+            </button>
+
+            {expertMode && (
+              <div className="mt-2 border border-slate-700 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-800">
+                {brokers === null && (
+                  <div className="flex items-center gap-2 px-3 py-3 text-xs text-slate-400">
+                    <Loader2 size={14} className="animate-spin" /> Chargement des courtiers…
+                  </div>
+                )}
+                {brokers?.map(b => (
+                  <label key={b.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(b.id)}
+                      onChange={() => toggleBroker(b.id)}
+                      className="accent-brand-500"
+                    />
+                    <span className="flex-1 text-slate-200 truncate">{b.name}</span>
+                    <AudienceBadge audience={b.audience} />
+                  </label>
+                ))}
+              </div>
+            )}
+            {expertSelectionEmpty && (
+              <p className="text-orange-400 text-xs mt-1">Sélectionne au moins un courtier.</p>
+            )}
           </div>
 
           {/* Confirmation email */}
@@ -155,7 +277,7 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
             </button>
             <button
               type="submit"
-              disabled={submitting || !password || aliasState.status === 'loading'}
+              disabled={submitting || !password || aliasState.status === 'loading' || expertSelectionEmpty}
               className="flex-1 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
             >
               {submitting ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Start scan'}

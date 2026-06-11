@@ -1,6 +1,6 @@
 import https from 'node:https'
 import type Database from 'better-sqlite3'
-import { decryptJobKey, decrypt, type EncryptedBlob } from './crypto/aes.js'
+import { decryptWithWorkerSecret, type EncryptedBlob } from './crypto/aes.js'
 import { config } from './config.js'
 
 function httpsGet(url: string, headers: Record<string, string>): Promise<string> {
@@ -77,22 +77,19 @@ async function checkSimpleLogin(
 export function startEmailChecker(db: Database.Database): void {
   const check = async () => {
     try {
+      // Credentials are encrypted with the WORKER_SECRET (not the user's password),
+      // so the worker can decrypt them continuously — independent of scan job keys,
+      // which are purged after each scan.
       const configs = db.prepare(`
-        SELECT ec.profile_id, ec.encrypted_credentials, sj.encrypted_job_key
-        FROM email_configs ec
-        JOIN scan_jobs sj ON sj.id = (
-          SELECT id FROM scan_jobs
-          WHERE profile_id = ec.profile_id AND status = 'done'
-          ORDER BY created_at DESC LIMIT 1
-        )
-        WHERE ec.provider = 'simplelogin'
-      `).all() as Array<{ profile_id: string; encrypted_credentials: string; encrypted_job_key: string }>
+        SELECT profile_id, encrypted_credentials
+        FROM email_configs
+        WHERE provider = 'simplelogin'
+      `).all() as Array<{ profile_id: string; encrypted_credentials: string }>
 
       for (const cfg of configs) {
         try {
-          const piiKey = decryptJobKey(cfg.encrypted_job_key, config.WORKER_SECRET)
           const credBlob: EncryptedBlob = JSON.parse(cfg.encrypted_credentials)
-          const credentials = JSON.parse(decrypt(credBlob, piiKey)) as Record<string, string>
+          const credentials = JSON.parse(decryptWithWorkerSecret(credBlob, config.WORKER_SECRET)) as Record<string, string>
           if (credentials.apiKey) {
             await checkSimpleLogin(db, cfg.profile_id, credentials.apiKey)
           }

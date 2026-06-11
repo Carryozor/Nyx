@@ -18,6 +18,7 @@ function loadAutoPurge(): Partial<AutoPurgeSetting> {
 
 export function Settings() {
   const [email, setEmail]             = useState('')
+  const [inviteRole, setInviteRole]   = useState<'manager' | 'editor' | 'viewer'>('manager')
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [slKey, setSlKey]             = useState(() => localStorage.getItem(SL_KEY) ?? '')
   const [slKeyVisible, setSlKeyVisible] = useState(false)
@@ -51,7 +52,7 @@ export function Settings() {
     setCreating(true)
     setError('')
     try {
-      const inv = await api.invitations.create(email) as { token: string; email: string }
+      const inv = await api.invitations.create(email, inviteRole) as { token: string; email: string }
       const link = `${window.location.origin}/register?token=${inv.token}&email=${encodeURIComponent(email)}`
       setNewToken(link)
       setEmail('')
@@ -276,6 +277,13 @@ export function Settings() {
             placeholder="user@example.com"
             className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             required />
+          <select value={inviteRole} onChange={e => setInviteRole(e.target.value as 'manager' | 'editor' | 'viewer')}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            title="Rôle attribué à l'invité">
+            <option value="manager">Gestionnaire</option>
+            <option value="editor">Éditeur</option>
+            <option value="viewer">Observateur</option>
+          </select>
           <button type="submit" disabled={creating}
             className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
             {creating ? 'Creating…' : 'Invite'}

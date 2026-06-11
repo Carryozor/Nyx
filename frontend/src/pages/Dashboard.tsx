@@ -4,7 +4,7 @@ import { CheckCircle2, Clock, AlertTriangle, Play, ChevronRight } from 'lucide-r
 import { useAuthStore } from '../store/auth.js'
 import { api } from '../api/client.js'
 import { StatusBadge } from '../components/StatusBadge.js'
-import { PasswordModal } from '../components/PasswordModal.js'
+import { ScanModal, type ScanOptions } from '../components/ScanModal.js'
 import type { Profile, OptOutRequest, ScanJob } from '../types.js'
 
 interface ProfileStats {
@@ -39,9 +39,9 @@ export function Dashboard() {
   const totalManual    = stats.flatMap(s => s.optOuts).filter(o => o.status === 'manual').length
   const activeJob      = jobs.find(j => j.status === 'running' || j.status === 'queued')
 
-  const handleScan = async (password: string) => {
+  const handleScan = async (password: string, opts: ScanOptions) => {
     if (!scanProfile) return
-    await api.scans.create(scanProfile.id, password)
+    await api.scans.create(scanProfile.id, password, opts.email, opts.aliasId, opts.audience, opts.brokerIds)
     setScanProfile(null)
     const updated = await api.scans.list() as ScanJob[]
     setJobs(updated)
@@ -136,8 +136,8 @@ export function Dashboard() {
       )}
 
       {scanProfile && (
-        <PasswordModal
-          title={`Scan "${scanProfile.label}"`}
+        <ScanModal
+          profileLabel={scanProfile.label}
           onConfirm={handleScan}
           onCancel={() => setScanProfile(null)}
         />

@@ -1,5 +1,5 @@
 import type { BrokerScriptFn } from './_types.js'
-import { setup, humanDelay, screenshot, requireEmail, hasCaptcha, sleep, stateAbbr, fillAge } from './_helpers.js'
+import { setup, humanDelay, screenshot, requireEmail, hasCaptcha, sleep, stateAbbr, fillAge, classifySubmitResult } from './_helpers.js'
 
 export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   const emailOrErr = requireEmail(pii)
@@ -8,6 +8,14 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   await page.goto('https://www.privatereports.com/opt-out', { waitUntil: 'domcontentloaded', timeout: 30000 })
   await humanDelay()
   if (await hasCaptcha(page)) return { status: 'failed', reason: 'captcha on landing page' }
+
+  // /opt-out now redirects to a people-search landing page (no opt-out form).
+  // Submitting the search here would NOT opt the user out, so flag it for manual handling.
+  if (/nameSearch|landingPage/i.test(page.url())) {
+    await screenshot(page, screenshotDir, 'search-landing')
+    return { status: 'manual', reason: 'PrivateReports a remplacé /opt-out par une page de recherche — soumettez la suppression manuellement sur privatereports.com' }
+  }
+
   await page.locator('button:has-text("Accept"), button:has-text("OK")').first().click().catch(() => {})
   await sleep(400)
   const firstInput = page.locator('input[name*="first" i], input[placeholder*="First" i]').first()
@@ -36,5 +44,5 @@ export const run: BrokerScriptFn = async ({ page, pii, screenshotDir }) => {
   await page.locator('button[type="submit"], input[type="submit"], button:has-text("Remove"), button:has-text("Submit"), button:has-text("Opt Out")').first().click().catch(() => {})
   await sleep(2000)
   await screenshot(page, screenshotDir, 'done')
-  return { status: 'awaiting_email', confirmationPattern: 'privatereports' }
+  return classifySubmitResult(page, 'privatereports')
 }

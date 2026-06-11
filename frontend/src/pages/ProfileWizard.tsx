@@ -37,12 +37,20 @@ export function ProfileWizard() {
   const [zip, setZip]         = useState('')
   const [country, setCountry] = useState('US')
 
+  const [companyName, setCompanyName] = useState('')
+  const [siren, setSiren]             = useState('')
+  const [siret, setSiret]             = useState('')
+  const [legalForm, setLegalForm]     = useState('')
+
   const pii: ProfilePII = {
     firstName, lastName, dob,
     email:   email || undefined,
     phone:   phone || undefined,
     aliases: alias ? [alias] : undefined,
     currentAddress: { street, city, state: state || undefined, zip: zip || undefined, country },
+    company: companyName
+      ? { name: companyName, siren: siren || undefined, siret: siret || undefined, legalForm: legalForm || undefined }
+      : undefined,
   }
 
   const handleNext = () => {
@@ -117,6 +125,21 @@ export function ProfileWizard() {
               <p className="text-xs text-slate-500 mt-1">Used when submitting opt-out forms. Confirmation emails will be sent here.</p>
             </div>
             <div><label className={LABEL}>Alias / maiden name (optional)</label><input type="text" value={alias} onChange={e => setAlias(e.target.value)} className={FIELD} /></div>
+
+            <hr className="border-slate-700" />
+            <p className="text-sm text-slate-300 font-medium">
+              Professionnel <span className="text-slate-500 font-normal">(optionnel — pour les courtiers B2B comme Altares)</span>
+            </p>
+            <div><label className={LABEL}>Raison sociale</label>
+              <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} className={FIELD} placeholder="ACME SARL" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className={LABEL}>SIREN <span className="text-slate-500">(9 chiffres)</span></label>
+                <input type="text" inputMode="numeric" value={siren} disabled={!companyName} onChange={e => setSiren(e.target.value)} className={`${FIELD} disabled:opacity-40`} placeholder="123456789" /></div>
+              <div><label className={LABEL}>SIRET <span className="text-slate-500">(14 chiffres)</span></label>
+                <input type="text" inputMode="numeric" value={siret} disabled={!companyName} onChange={e => setSiret(e.target.value)} className={`${FIELD} disabled:opacity-40`} placeholder="12345678900012" /></div>
+            </div>
+            <div><label className={LABEL}>Forme juridique</label>
+              <input type="text" value={legalForm} disabled={!companyName} onChange={e => setLegalForm(e.target.value)} className={`${FIELD} disabled:opacity-40`} placeholder="SARL, SAS, EI…" /></div>
           </div>
         )}
 

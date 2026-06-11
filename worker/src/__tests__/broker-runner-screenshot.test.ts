@@ -5,7 +5,8 @@ function makeDb() {
   const db = new Database(':memory:')
   db.exec(`
     CREATE TABLE brokers (id TEXT PRIMARY KEY, name TEXT, url TEXT, country TEXT,
-      type TEXT, script_file TEXT, manual_guide TEXT, active INTEGER DEFAULT 1);
+      type TEXT, script_file TEXT, manual_guide TEXT, opt_out_email TEXT, gdpr_lang TEXT,
+      audience TEXT DEFAULT 'private', active INTEGER DEFAULT 1);
     CREATE TABLE profiles (id TEXT PRIMARY KEY, user_id TEXT, label TEXT,
       encrypted_pii TEXT, created_at TEXT);
     CREATE TABLE opt_out_requests (id TEXT PRIMARY KEY, profile_id TEXT,
@@ -18,7 +19,8 @@ function makeDb() {
       created_at TEXT, started_at TEXT, finished_at TEXT, created_by TEXT);
     CREATE TABLE scan_events (id TEXT PRIMARY KEY, job_id TEXT, event_type TEXT,
       payload TEXT, created_at TEXT, broadcast INTEGER DEFAULT 0);
-    INSERT INTO brokers VALUES ('testbroker','Test','http://test.com','US','auto','_stub.js',NULL,1);
+    INSERT INTO brokers (id,name,url,country,type,script_file,manual_guide,active)
+      VALUES ('testbroker','Test','http://test.com','US','auto','_stub.js',NULL,1);
     INSERT INTO profiles VALUES ('p1','u1','Test','{}','2026-01-01');
     INSERT INTO opt_out_requests (id, profile_id, broker_id) VALUES ('oo1','p1','testbroker');
   `)
@@ -30,9 +32,11 @@ vi.mock('playwright-extra', () => ({
     use: vi.fn(),
     launch: vi.fn().mockResolvedValue({
       newContext: vi.fn().mockResolvedValue({
+        route: vi.fn().mockResolvedValue(undefined),
         newPage: vi.fn().mockResolvedValue({
           setViewportSize: vi.fn(),
           setExtraHTTPHeaders: vi.fn(),
+          goto: vi.fn().mockResolvedValue(null),
         }),
       }),
       close: vi.fn(),

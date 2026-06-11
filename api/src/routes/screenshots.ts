@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getDb } from '../db/client.js'
 import { requireAuth } from '../auth/middleware.js'
+import { requireProfileRead } from '../auth/access.js'
 import { config } from '../config.js'
 
 const FILENAME_RE = /^[a-z0-9_-]+\.png$/i
@@ -11,12 +12,13 @@ interface OptOutScreenshotRow {
   screenshot: string | null
   broker_id: string
   user_id: string
+  profile_id: string
 }
 
 function resolveOptOut(id: string): OptOutScreenshotRow | null {
   const db = getDb()
   return db.prepare(`
-    SELECT oor.screenshot, oor.broker_id, p.user_id
+    SELECT oor.screenshot, oor.broker_id, oor.profile_id, p.user_id
     FROM opt_out_requests oor
     JOIN profiles p ON p.id = oor.profile_id
     WHERE oor.id = ?
@@ -30,9 +32,7 @@ export function registerScreenshotRoutes(app: FastifyInstance): void {
 
     const row = resolveOptOut(id)
     if (!row) return reply.code(404).send({ error: 'Not found' })
-    if (req.user.role !== 'admin' && row.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireProfileRead(getDb(), req.user, row.profile_id, reply)) return
     if (!row.screenshot) return reply.send([])
 
     const dir = path.join(config.SCREENSHOT_DIR, row.screenshot, row.broker_id)
@@ -54,9 +54,7 @@ export function registerScreenshotRoutes(app: FastifyInstance): void {
 
     const row = resolveOptOut(id)
     if (!row) return reply.code(404).send({ error: 'Not found' })
-    if (req.user.role !== 'admin' && row.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireProfileRead(getDb(), req.user, row.profile_id, reply)) return
     if (!row.screenshot) return reply.code(404).send({ error: 'No screenshots' })
 
     const filePath = path.join(config.SCREENSHOT_DIR, row.screenshot, row.broker_id, filename)

@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Trash2, ChevronRight } from 'lucide-react'
 import { api } from '../api/client.js'
+import { useAuthStore } from '../store/auth.js'
+import { hasRank } from '../lib/roles.js'
 import type { Profile } from '../types.js'
 
 export function Profiles() {
+  const { user } = useAuthStore()
+  const canCreate = hasRank(user?.role, 'manager')
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [loading, setLoading]   = useState(true)
 
@@ -29,11 +33,13 @@ export function Profiles() {
     <div className="p-8 max-w-3xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white">Profiles</h1>
-        <Link to="/profiles/new"
-          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm transition">
-          <Plus size={16} />
-          New profile
-        </Link>
+        {canCreate && (
+          <Link to="/profiles/new"
+            className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm transition">
+            <Plus size={16} />
+            New profile
+          </Link>
+        )}
       </div>
 
       {profiles.length === 0 ? (
@@ -51,10 +57,12 @@ export function Profiles() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={() => handleDelete(p.id, p.label)}
-                  className="text-slate-500 hover:text-red-400 transition">
-                  <Trash2 size={16} />
-                </button>
+                {(user?.role === 'admin' || p.user_id === user?.id) && (
+                  <button onClick={() => handleDelete(p.id, p.label)}
+                    className="text-slate-500 hover:text-red-400 transition">
+                    <Trash2 size={16} />
+                  </button>
+                )}
                 <Link to={`/profiles/${p.id}`} className="text-slate-400 hover:text-white transition">
                   <ChevronRight size={18} />
                 </Link>

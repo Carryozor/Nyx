@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { X, Loader2, CheckCircle } from 'lucide-react'
-import type { ScanProgress as ScanProgressType } from '../hooks/useWebSocket.js'
+import type { ScanProgress as ScanProgressType } from '../context/WebSocketContext.js'
 
 interface Props {
   scans:     Map<string, ScanProgressType>

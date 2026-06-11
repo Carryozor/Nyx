@@ -1,4 +1,4 @@
-import type { ScanJob } from '../types.js'
+import type { ScanJob, ProfileShare } from '../types.js'
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -44,6 +44,13 @@ export const api = {
     scans:   (id: string) => req<ScanJob[]>('GET', `/profiles/${id}/scans`),
   },
 
+  // Profile sharing (owner/admin)
+  shares: {
+    list:   (profileId: string) => req<ProfileShare[]>('GET', `/profiles/${profileId}/shares`),
+    add:    (profileId: string, email: string) => req('POST', `/profiles/${profileId}/shares`, { email }),
+    remove: (profileId: string, userId: string) => req('DELETE', `/profiles/${profileId}/shares/${userId}`),
+  },
+
   // Brokers
   brokers: {
     list: (type?: string) => req('GET', `/brokers${type ? `?type=${type}` : ''}`),
@@ -60,8 +67,15 @@ export const api = {
 
   // Scans
   scans: {
-    create: (profileId: string, password: string, email?: string, aliasId?: number | null) =>
-      req('POST', '/scans', { profileId, password, email, aliasId }),
+    create: (
+      profileId: string,
+      password: string,
+      email?: string,
+      aliasId?: number | null,
+      audience: 'private' | 'professional' | 'both' = 'both',
+      brokerIds?: string[],
+    ) =>
+      req('POST', '/scans', { profileId, password, email, aliasId, audience, ...(brokerIds?.length ? { brokerIds } : {}) }),
     list:   () => req('GET', '/scans'),
     get:    (id: string) => req('GET', `/scans/${id}`),
   },
@@ -80,7 +94,8 @@ export const api = {
 
   // Invitations
   invitations: {
-    create: (email: string) => req('POST', '/invitations', { email }),
+    create: (email: string, role: 'manager' | 'editor' | 'viewer' = 'manager') =>
+      req('POST', '/invitations', { email, role }),
     list:   () => req('GET', '/invitations'),
   },
 

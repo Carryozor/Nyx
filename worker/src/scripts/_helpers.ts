@@ -262,3 +262,48 @@ export async function isConfirmationPage(page: Page): Promise<boolean> {
     || /you.?ve been (removed|opted out)/i.test(text)
     || /check your email/i.test(text)
 }
+
+/**
+ * Inspect the page after submitting an opt-out form and return an honest status
+ * instead of blindly assuming success. Detects explicit site errors, "check your
+ * email" confirmations, and generic success messages.
+ */
+export async function classifySubmitResult(page: Page, emailPattern: string): Promise<OptOutResult> {
+  const body = ((await page.textContent('body').catch(() => '')) ?? '').toLowerCase()
+
+  // Behavioral bot walls (e.g. InfoPay "BotShield" slide-to-verify) appear AFTER
+  // submit and silently block the opt-out — Playwright can't pass them.
+  const botChallengePatterns = [
+    /are you human/i, /slide to verify/i, /press & hold/i, /security check/i,
+    /bot.?shield/i, /verify you.?re (a )?human/i, /complete the (security )?check/i,
+  ]
+  if (botChallengePatterns.some(re => re.test(body))) {
+    return { status: 'manual', reason: 'soumission bloquée par une vérification anti-bot (slide-to-verify) — opt-out à finaliser manuellement' }
+  }
+
+  const errorPatterns = [
+    /something went wrong/i, /please try again/i, /an error (has )?occurred/i,
+    /unable to process/i, /request failed/i, /too many requests/i, /rate limit/i,
+    /temporarily unavailable/i, /access denied/i, /forbidden/i,
+  ]
+  for (const re of errorPatterns) {
+    const m = body.match(re)
+    if (m) return { status: 'failed', reason: `site error after submit: "${m[0]}"` }
+  }
+
+  const emailPatterns = [
+    /check your email/i, /we.?ve sent/i, /email.*(sent|on its way)/i,
+    /verification.*(link|email)/i, /confirm.*email/i, /please verify/i, /look for.*email/i,
+  ]
+  if (emailPatterns.some(re => re.test(body)) || await isConfirmationPage(page)) {
+    return { status: 'awaiting_email', confirmationPattern: emailPattern }
+  }
+
+  const submittedPatterns = [
+    /your (request|opt.?out|removal) (has been|was) (received|submitted)/i,
+    /has been submitted/i, /successfully (removed|opted out|submitted)/i, /thank you/i,
+  ]
+  if (submittedPatterns.some(re => re.test(body))) return { status: 'submitted' }
+
+  return { status: 'failed', reason: 'ambiguous result after submit — no confirmation detected on page' }
+}

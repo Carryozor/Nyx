@@ -5,7 +5,7 @@ import { getDb } from '../db/client.js'
 import { hashPassword, verifyPassword } from '../crypto/argon.js'
 import { signToken } from './jwt.js'
 import { requireAuth } from './middleware.js'
-import type { UserRow, InvitationRow } from '../types.js'
+import type { UserRow, InvitationRow, Role } from '../types.js'
 
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000'
 
@@ -36,43 +36,39 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       'SELECT count(*) as n FROM users WHERE id != ?'
     ).get(SYSTEM_USER_ID) as { n: number }).n
 
-    let role: 'admin' | 'user' = 'user'
-    let invitedBy: string | null = null
-
-    if (userCount === 0) {
-      role = 'admin'
-    } else {
-      if (!invitationToken) {
-        return reply.code(403).send({ error: 'Invitation required' })
-      }
+    // First user bootstraps as admin (no invitation). Everyone else must be invited,
+    // and inherits the role the invitation was created with.
+    const isBootstrap = userCount === 0
+    if (!isBootstrap && !invitationToken) {
+      return reply.code(403).send({ error: 'Invitation required' })
     }
 
     const id            = uuid()
     const password_hash = await hashPassword(password)
     const created_at    = new Date().toISOString()
+    let role: Role = 'admin'
 
-    if (role === 'user') {
-      // Wrap invitation consume + user insert in one transaction
+    if (isBootstrap) {
+      db.prepare(
+        'INSERT INTO users (id, email, password_hash, role, created_at, invited_by) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(id, email, password_hash, role, created_at, null)
+    } else {
+      // Consume invitation + insert user atomically; role/inviter come from the invitation.
       const registerWithInvitation = db.transaction(() => {
         const now = new Date().toISOString()
-        const consumed = db.prepare(
-          'UPDATE invitations SET used_at = ? WHERE token = ? AND used_at IS NULL AND expires_at > ? AND email = ?'
-        ).run(now, invitationToken!, now, email)
-        if (consumed.changes === 0) return false
-        const inv2 = db.prepare('SELECT created_by FROM invitations WHERE token = ?')
-          .get(invitationToken) as { created_by: string } | undefined
-        invitedBy = inv2?.created_by ?? null
+        const inv = db.prepare(
+          'SELECT created_by, role FROM invitations WHERE token = ? AND used_at IS NULL AND expires_at > ? AND email = ?'
+        ).get(invitationToken!, now, email) as { created_by: string; role: Role } | undefined
+        if (!inv) return false
+        db.prepare('UPDATE invitations SET used_at = ? WHERE token = ?').run(now, invitationToken!)
+        role = inv.role
         db.prepare(
           'INSERT INTO users (id, email, password_hash, role, created_at, invited_by) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(id, email, password_hash, role, created_at, invitedBy)
+        ).run(id, email, password_hash, role, created_at, inv.created_by ?? null)
         return true
       })
       const ok = registerWithInvitation()
       if (!ok) return reply.code(403).send({ error: 'Invalid, expired or already used invitation' })
-    } else {
-      db.prepare(
-        'INSERT INTO users (id, email, password_hash, role, created_at, invited_by) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(id, email, password_hash, role, created_at, null)
     }
 
     return reply.code(201).send({ id, email, role, created_at })
@@ -94,7 +90,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       return reply.code(401).send({ error: 'Invalid credentials' })
     }
 
-    const token = signToken({ id: user.id, email: user.email, role: user.role as 'admin' | 'user' })
+    const token = signToken({ id: user.id, email: user.email, role: user.role as Role })
 
     return reply
       .setCookie('nyx_session', token, {

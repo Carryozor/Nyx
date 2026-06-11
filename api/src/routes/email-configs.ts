@@ -3,9 +3,10 @@ import { v4 as uuid } from 'uuid'
 import { z } from 'zod'
 import { getDb } from '../db/client.js'
 import { verifyPassword } from '../crypto/argon.js'
-import { deriveKey } from '../crypto/kdf.js'
-import { encrypt } from '../crypto/aes.js'
+import { encryptWithWorkerSecret } from '../crypto/aes.js'
+import { config } from '../config.js'
 import { requireAuth } from '../auth/middleware.js'
+import { requireProfileRead, requireProfileAction } from '../auth/access.js'
 import type { UserRow, ProfileRow, EmailConfigRow } from '../types.js'
 
 const emailConfigSchema = z.object({
@@ -27,18 +28,16 @@ export function registerEmailConfigRoutes(app: FastifyInstance): void {
     const db      = getDb()
     const profile = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as ProfileRow | undefined
     if (!profile) return reply.code(404).send({ error: 'Not found' })
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireProfileAction(db, req.user, id, reply)) return
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
     if (!(await verifyPassword(password, user.password_hash))) {
       return reply.code(401).send({ error: 'Wrong password' })
     }
 
-    const piiBlob = JSON.parse(profile.encrypted_pii)
-    const key     = await deriveKey(password, piiBlob.salt)
-    const blob    = encrypt(JSON.stringify(credentials), key, piiBlob.salt)
+    // Encrypt with the WORKER_SECRET (not the password) so the background worker can
+    // decrypt the SimpleLogin key continuously, independent of transient scan job keys.
+    const blob = encryptWithWorkerSecret(JSON.stringify(credentials), config.WORKER_SECRET)
 
     const configId = uuid()
     db.prepare(`
@@ -55,9 +54,7 @@ export function registerEmailConfigRoutes(app: FastifyInstance): void {
     const db = getDb()
     const profile = db.prepare('SELECT user_id FROM profiles WHERE id = ?').get(id) as { user_id: string } | undefined
     if (!profile) return reply.code(404).send({ error: 'Not found' })
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireProfileRead(db, req.user, id, reply)) return
     const row = db.prepare('SELECT id, profile_id, provider FROM email_configs WHERE profile_id = ?').get(id) as EmailConfigRow | undefined
     return reply.send(row ?? null)
   })
@@ -67,9 +64,7 @@ export function registerEmailConfigRoutes(app: FastifyInstance): void {
     const db = getDb()
     const profile = db.prepare('SELECT user_id FROM profiles WHERE id = ?').get(id) as { user_id: string } | undefined
     if (!profile) return reply.code(404).send({ error: 'Not found' })
-    if (req.user.role !== 'admin' && profile.user_id !== req.user.id) {
-      return reply.code(403).send({ error: 'Forbidden' })
-    }
+    if (!requireProfileAction(db, req.user, id, reply)) return
     db.prepare('DELETE FROM email_configs WHERE profile_id = ?').run(id)
     return reply.code(204).send()
   })
