@@ -98,8 +98,18 @@ export async function sendGdprEmail(
 
   const { subject, text } = buildGdprEmail(broker, pii)
 
+  // From = the per-scan alias when it's on our authenticated sending domain (so each
+  // scan sends from its own monitored alias rather than the single instance address),
+  // otherwise the configured instance sender. Reply-To carries the profile's reception
+  // address. NOTE: with a single shared SimpleLogin account, every vidar.fr alias still
+  // forwards to that account's mailbox — Reply-To is what routes replies elsewhere.
+  const sendingDomain = config.MAIL_FROM.split('@')[1]
+  const from = pii.email && sendingDomain && pii.email.endsWith(`@${sendingDomain}`)
+    ? pii.email
+    : config.MAIL_FROM
+
   try {
-    await sender({ from: config.MAIL_FROM, to: broker.opt_out_email, subject, text, replyTo })
+    await sender({ from, to: broker.opt_out_email, subject, text, replyTo })
   } catch (err) {
     return { status: 'failed', reason: `échec envoi email RGPD à ${broker.opt_out_email}: ${String(err)}` }
   }

@@ -100,6 +100,22 @@ describe('sendGdprEmail', () => {
     }
   })
 
+  it('sends From the per-scan alias when it is on the configured sending domain', async () => {
+    const sender = vi.fn().mockResolvedValue(undefined)
+    // MAIL_FROM default in tests is privacy@localhost → domain "localhost".
+    const piiOnDomain: DecryptedPII = { ...pii, email: 'scan-xyz@localhost' }
+    await sendGdprEmail(broker, piiOnDomain, 'delegate@autre.fr', sender)
+    const msg = sender.mock.calls[0][0]
+    expect(msg.from).toBe('scan-xyz@localhost')
+    expect(msg.replyTo).toBe('delegate@autre.fr')
+  })
+
+  it('falls back to the instance sender when the alias is on another domain', async () => {
+    const sender = vi.fn().mockResolvedValue(undefined)
+    await sendGdprEmail(broker, pii, 'delegate@autre.fr', sender) // pii.email = alias@simplelogin.io
+    expect(sender.mock.calls[0][0].from).not.toBe('alias@simplelogin.io')
+  })
+
   it('fails gracefully when no email transport is configured', async () => {
     const result = await sendGdprEmail(broker, pii, 'alias@simplelogin.io', null)
     expect(result.status).toBe('failed')
