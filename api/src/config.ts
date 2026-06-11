@@ -10,6 +10,8 @@ const schema = z.object({
   COOKIE_SECURE:  z.coerce.boolean().default(false),
   SCREENSHOT_DIR:  z.string().default('/data/screenshots'),
   WEBHOOK_SECRET:  z.string().min(16).optional().default(''),
+  MAIL_DAILY_CAP:  z.coerce.number().int().positive().default(300),
+  BREVO_API_KEY:   z.string().optional().default(''),
 })
 
 const parsed = schema.safeParse(process.env)

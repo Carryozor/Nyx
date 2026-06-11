@@ -8,6 +8,7 @@ import { deriveKey } from '../crypto/kdf.js'
 import { encryptJobKey } from '../crypto/aes.js'
 import { requireAuth } from '../auth/middleware.js'
 import { requireProfileRead, requireProfileAction } from '../auth/access.js'
+import { countSentSince, estimateEmails, windowStart } from '../mail-quota.js'
 import type { UserRow, ProfileRow, ScanJobRow, BrokerRow } from '../types.js'
 
 const createScanSchema = z.object({
@@ -70,6 +71,20 @@ export function registerScanRoutes(app: FastifyInstance): void {
       brokers = db.prepare(`SELECT * FROM brokers WHERE ${conds.join(' AND ')}`).all(...params) as BrokerRow[]
     }
 
+    // Brevo daily-quota gate: a scan that would exceed the remaining mail budget is refused.
+    const estimate  = estimateEmails(brokers)
+    const sentToday = countSentSince(db, windowStart())
+    const remaining = Math.max(0, config.MAIL_DAILY_CAP - sentToday)
+    if (estimate > remaining) {
+      return reply.code(409).send({
+        error: `Budget email insuffisant : ${remaining} restant(s) sur ${config.MAIL_DAILY_CAP}, ce scan en enverrait ${estimate}.`,
+        cap: config.MAIL_DAILY_CAP,
+        sent_today: sentToday,
+        remaining,
+        estimate,
+      })
+    }
+
     const jobId      = uuid()
     const created_at = new Date().toISOString()
 
@@ -95,6 +110,15 @@ export function registerScanRoutes(app: FastifyInstance): void {
     `)
     for (const broker of brokers) {
       insertOpt.run(uuid(), profileId, broker.id)
+    }
+
+    // Reserve the mail budget now (synchronously, no await since the gate check above)
+    // so concurrent scan submissions can't both pass near the daily cap. Each broker
+    // with a DPO email = one reserved send; the worker does not re-log on send.
+    const reserve = db.prepare('INSERT INTO mail_log (id, profile_id, broker_id, sent_at) VALUES (?, ?, ?, ?)')
+    const reservedAt = new Date().toISOString()
+    for (const broker of brokers) {
+      if (broker.opt_out_email) reserve.run(uuid(), profileId, broker.id, reservedAt)
     }
 
     return reply.code(201).send({
@@ -137,6 +161,35 @@ export function registerScanRoutes(app: FastifyInstance): void {
         `).all(job.profile_id)
 
     return reply.send({ ...job, profile_label: profile.label, opt_outs: optOuts })
+  })
+
+  app.get('/mail-quota', { preHandler: requireAuth }, async (_req, reply) => {
+    const db = getDb()
+    const sent = countSentSince(db, windowStart())
+    const cap  = config.MAIL_DAILY_CAP
+    const out: { sent_today: number; cap: number; remaining: number; brevo?: unknown } = {
+      sent_today: sent,
+      cap,
+      remaining: Math.max(0, cap - sent),
+    }
+
+    // Best-effort live figure from Brevo when an API key is configured (info only).
+    if (config.BREVO_API_KEY) {
+      try {
+        const res = await fetch('https://api.brevo.com/v3/account', {
+          headers: { 'api-key': config.BREVO_API_KEY, accept: 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        })
+        if (res.ok) {
+          const data = await res.json() as { plan?: unknown }
+          out.brevo = { plan: data.plan ?? null }
+        }
+      } catch {
+        // ignore — local counter remains the source of truth
+      }
+    }
+
+    return reply.send(out)
   })
 
   app.get('/profiles/:id/scans', { preHandler: requireAuth }, async (req, reply) => {

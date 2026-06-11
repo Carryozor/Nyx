@@ -395,6 +395,8 @@ export function ProfileDetail() {
       {showScan && (
         <ScanModal
           profileLabel={profile.label}
+          profileId={profile.id}
+          defaultRedirectEmail={profile.redirect_email}
           onConfirm={handleScan}
           onCancel={() => setShowScan(false)}
         />

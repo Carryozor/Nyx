@@ -24,6 +24,7 @@ function makeDb() {
       UNIQUE(profile_id, broker_id));
     CREATE TABLE scan_events (id TEXT PRIMARY KEY, job_id TEXT, event_type TEXT,
       payload TEXT, created_at TEXT, broadcast INTEGER DEFAULT 0);
+    CREATE TABLE mail_log (id TEXT PRIMARY KEY, profile_id TEXT, broker_id TEXT, sent_at TEXT NOT NULL);
     INSERT INTO brokers (id,name,country,type,script_file,opt_out_email,gdpr_lang)
       VALUES ('pagesjaunes','Pages Jaunes','FR','auto',NULL,'dpo@solocal.com','fr');
     INSERT INTO opt_out_requests (id, profile_id, broker_id) VALUES ('oo1','p1','pagesjaunes');

@@ -42,6 +42,8 @@ export const api = {
       req('PATCH', `/profiles/${id}`, { password, pii, label }),
     delete:  (id: string) => req('DELETE', `/profiles/${id}`),
     scans:   (id: string) => req<ScanJob[]>('GET', `/profiles/${id}/scans`),
+    setRedirectEmail: (id: string, redirect_email: string | null) =>
+      req('PUT', `/profiles/${id}/redirect-email`, { redirect_email }),
   },
 
   // Profile sharing (owner/admin)
@@ -85,6 +87,8 @@ export const api = {
     get:    (id: string) => req('GET', `/scans/${id}`),
   },
 
+  mailQuota: () => req<{ sent_today: number; cap: number; remaining: number; brevo?: unknown }>('GET', '/mail-quota'),
+
   // SimpleLogin alias proxy
   simplelogin: {
     createAlias: (apiKey: string, note: string) =>
@@ -95,6 +99,10 @@ export const api = {
       req<{ aliases: { id: number; alias: string }[] }>('POST', '/simplelogin/aliases/nyx', { apiKey }),
     purgeAliases: (apiKey: string, aliasIds: number[]) =>
       req<{ deleted: number }>('POST', '/simplelogin/aliases/purge', { apiKey, aliasIds }),
+    addMailbox: (apiKey: string, email: string) =>
+      req<{ id: number | null; email: string; verified: boolean }>('POST', '/simplelogin/mailboxes/add', { apiKey, email }),
+    routeAlias: (apiKey: string, aliasId: number, mailbox: string) =>
+      req<{ routed: boolean; verified: boolean; reason?: string }>('PUT', `/simplelogin/alias/${aliasId}/mailbox`, { apiKey, mailbox }),
   },
 
   // Invitations

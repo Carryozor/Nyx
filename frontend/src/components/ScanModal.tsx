@@ -23,6 +23,8 @@ const REGION_BUTTONS: { key: RegionKey; label: string }[] = [
 
 interface Props {
   profileLabel: string
+  profileId: string
+  defaultRedirectEmail?: string | null
   onConfirm: (password: string, opts: ScanOptions) => Promise<void>
   onCancel: () => void
 }
@@ -55,7 +57,7 @@ function AudienceBadge({ audience }: { audience: BrokerAudience }) {
   )
 }
 
-export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
+export function ScanModal({ profileLabel, profileId, defaultRedirectEmail, onConfirm, onCancel }: Props) {
   const [password, setPassword]   = useState('')
   const [manualEmail, setManualEmail] = useState('')
   const [aliasState, setAliasState]   = useState<AliasState>({ status: 'idle' })
@@ -67,6 +69,8 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   // Empty set = no country filter (all countries).
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set())
+  const [quota, setQuota] = useState<{ sent_today: number; cap: number; remaining: number } | null>(null)
+  const [redirectEmail, setRedirectEmail] = useState(defaultRedirectEmail ?? '')
   const passwordRef = useRef<HTMLInputElement>(null)
   const aliasCreatedRef = useRef<{ aliasId: number } | null>(null)
   const hasSLKey = Boolean(localStorage.getItem(SL_KEY)?.trim())
@@ -94,6 +98,7 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
         setSelectedIds(new Set(targetable.map(b => b.id)))
       })
       .catch(() => setBrokers([]))
+    api.mailQuota().then(setQuota).catch(() => setQuota(null))
   }, [])
 
   // Individual countries offered as checkboxes (the pan-EU tag is region-only).
@@ -159,6 +164,23 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
     setSubmitting(true)
     setError('')
     try {
+      // Route broker replies to a delegate mailbox when requested (Feature A).
+      const redirect = redirectEmail.trim()
+      if (redirect && aliasState.status === 'ok' && aliasState.aliasId) {
+        const key = localStorage.getItem(SL_KEY)?.trim()
+        if (key) {
+          const r = await api.simplelogin.routeAlias(key, aliasState.aliasId, redirect).catch(() => null)
+          if (r && !r.routed) {
+            // Not a verified mailbox yet — trigger verification; replies stay on the owner box until confirmed.
+            if (r.reason === 'mailbox_absent') await api.simplelogin.addMailbox(key, redirect).catch(() => {})
+          }
+        }
+      }
+      // Remember the (possibly edited) redirect on the profile for next time.
+      if (redirect !== (defaultRedirectEmail ?? '')) {
+        await api.profiles.setRedirectEmail(profileId, redirect || null).catch(() => {})
+      }
+
       await onConfirm(password, {
         email: effectiveEmail,
         aliasId: effectiveAliasId,
@@ -179,9 +201,18 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
         <h2 className="text-lg font-semibold text-white mb-1">
           Scan &ldquo;{profileLabel}&rdquo;
         </h2>
-        <p className="text-sm text-slate-400 mb-5">
+        <p className="text-sm text-slate-400 mb-3">
           Enter your master password to decrypt and start the scan.
         </p>
+
+        {quota && (
+          <div className={`mb-4 text-xs px-3 py-1.5 rounded-lg border ${
+            quota.remaining === 0 ? 'border-red-800 bg-red-900/20 text-red-300' : 'border-slate-700 text-slate-400'
+          }`}>
+            Budget email Brevo : <span className="text-slate-200">{quota.remaining}</span> / {quota.cap} restants aujourd'hui
+            {quota.remaining === 0 && ' — scan bloqué tant que le quota est épuisé.'}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Password */}
@@ -350,6 +381,23 @@ export function ScanModal({ profileLabel, onConfirm, onCancel }: Props) {
               {hasSLKey
                 ? 'Opt-out confirmations will arrive at this alias.'
                 : 'Used to receive opt-out confirmation emails. Configure SimpleLogin in Settings for auto-aliases.'}
+            </p>
+          </div>
+
+          {/* Reply redirect (delegate) */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Rediriger les réponses vers (optionnel)</label>
+            <input
+              type="email"
+              value={redirectEmail}
+              onChange={e => setRedirectEmail(e.target.value)}
+              placeholder="delegue@autre.fr"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Les réponses des courtiers sont routées vers cette adresse (mailbox SimpleLogin). Si elle
+              n'est pas encore vérifiée, un mail de vérification lui est envoyé ; en attendant, les
+              réponses restent sur ta boîte. Vide = comportement par défaut.
             </p>
           </div>
 

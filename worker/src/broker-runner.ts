@@ -73,6 +73,7 @@ export async function runBroker(
       notes, confirmationPattern,
       profileId, brokerId,
     )
+    // Mail budget is reserved at scan creation (API), so no logging here.
     emitEvent(db, jobId, 'broker_done', { broker: brokerId, status: result.status, notes })
     return result
   }

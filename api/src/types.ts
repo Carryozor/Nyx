@@ -47,6 +47,7 @@ export interface ProfileRow {
   label: string
   encrypted_pii: string
   created_at: string
+  redirect_email: string | null
 }
 
 export interface BrokerRow {
@@ -59,6 +60,8 @@ export interface BrokerRow {
   manual_guide: string | null
   active: number
   audience: 'private' | 'professional' | 'both'
+  opt_out_email: string | null
+  gdpr_lang: string | null
 }
 
 export interface ScanJobRow {

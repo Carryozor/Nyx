@@ -138,6 +138,8 @@ export function Dashboard() {
       {scanProfile && (
         <ScanModal
           profileLabel={scanProfile.label}
+          profileId={scanProfile.id}
+          defaultRedirectEmail={scanProfile.redirect_email}
           onConfirm={handleScan}
           onCancel={() => setScanProfile(null)}
         />

@@ -6,7 +6,7 @@ import { verifyPassword } from '../crypto/argon.js'
 import { deriveKey, generateSalt } from '../crypto/kdf.js'
 import { encrypt, decrypt } from '../crypto/aes.js'
 import { requireAuth, requireRole } from '../auth/middleware.js'
-import { requireProfileRead, requireOwnerOrAdmin } from '../auth/access.js'
+import { requireProfileRead, requireProfileAction, requireOwnerOrAdmin } from '../auth/access.js'
 import type { UserRow, ProfileRow, ProfilePII } from '../types.js'
 
 const AddressSchema = z.object({
@@ -41,9 +41,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   app.get('/profiles', { preHandler: requireAuth }, async (req, reply) => {
     const db = getDb()
     const rows: ProfileRow[] = req.user.role === 'admin'
-      ? db.prepare('SELECT id, user_id, label, created_at FROM profiles ORDER BY created_at DESC').all() as ProfileRow[]
+      ? db.prepare('SELECT id, user_id, label, created_at, redirect_email FROM profiles ORDER BY created_at DESC').all() as ProfileRow[]
       : db.prepare(`
-          SELECT DISTINCT p.id, p.user_id, p.label, p.created_at
+          SELECT DISTINCT p.id, p.user_id, p.label, p.created_at, p.redirect_email
           FROM profiles p
           LEFT JOIN profile_access pa ON pa.profile_id = p.id AND pa.user_id = ?
           WHERE p.user_id = ? OR pa.user_id IS NOT NULL
@@ -53,10 +53,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   })
 
   app.post('/profiles', { preHandler: requireRole('manager') }, async (req, reply) => {
-    const { label, password, pii } = req.body as {
+    const { label, password, pii, redirect_email } = req.body as {
       label:    string
       password: string
       pii:      ProfilePII
+      redirect_email?: string
+    }
+    if (redirect_email && !z.string().email().safeParse(redirect_email).success) {
+      return reply.code(400).send({ error: 'redirect_email invalide' })
     }
 
     if (!label || !password || !pii) {
@@ -81,20 +85,39 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     const created_at = new Date().toISOString()
 
     db.prepare(
-      'INSERT INTO profiles (id, user_id, label, encrypted_pii, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(id, req.user.id, label, JSON.stringify(blob), created_at)
+      'INSERT INTO profiles (id, user_id, label, encrypted_pii, created_at, redirect_email) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(id, req.user.id, label, JSON.stringify(blob), created_at, redirect_email ?? null)
 
-    return reply.code(201).send({ id, user_id: req.user.id, label, created_at })
+    return reply.code(201).send({ id, user_id: req.user.id, label, created_at, redirect_email: redirect_email ?? null })
   })
 
   app.get('/profiles/:id', { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const db = getDb()
-    const profile = db.prepare('SELECT id, user_id, label, created_at FROM profiles WHERE id = ?').get(id) as ProfileRow | undefined
+    const profile = db.prepare('SELECT id, user_id, label, created_at, redirect_email FROM profiles WHERE id = ?').get(id) as ProfileRow | undefined
 
     if (!profile) return reply.code(404).send({ error: 'Profile not found' })
     if (!requireProfileRead(db, req.user, id, reply)) return
     return reply.send(profile)
+  })
+
+  // Where broker replies are routed. Editable by editor+ (not viewer); not PII, so
+  // no master password needed.
+  app.put('/profiles/:id/redirect-email', { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const parsed = z.object({ redirect_email: z.string().email().nullable() }).safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'redirect_email invalide (email ou null attendu)' })
+    }
+    const { redirect_email } = parsed.data
+
+    const db = getDb()
+    const profile = db.prepare('SELECT id FROM profiles WHERE id = ?').get(id)
+    if (!profile) return reply.code(404).send({ error: 'Profile not found' })
+    if (!requireProfileAction(db, req.user, id, reply)) return
+
+    db.prepare('UPDATE profiles SET redirect_email = ? WHERE id = ?').run(redirect_email, id)
+    return reply.send({ id, redirect_email })
   })
 
   app.post('/profiles/:id/decrypt', { preHandler: requireAuth }, async (req, reply) => {
@@ -156,7 +179,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       db.prepare('UPDATE profiles SET label = ? WHERE id = ?').run(label, id)
     }
 
-    const updated = db.prepare('SELECT id, user_id, label, created_at FROM profiles WHERE id = ?').get(id) as ProfileRow
+    const updated = db.prepare('SELECT id, user_id, label, created_at, redirect_email FROM profiles WHERE id = ?').get(id) as ProfileRow
     return reply.send(updated)
   })
 

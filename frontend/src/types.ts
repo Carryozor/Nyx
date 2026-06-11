@@ -18,6 +18,7 @@ export interface Profile {
   user_id: string
   label: string
   created_at: string
+  redirect_email?: string | null
 }
 
 export interface CompanyInfo {
