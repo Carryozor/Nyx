@@ -1,5 +1,6 @@
 import type { FastifyReply } from 'fastify'
 import type Database from 'better-sqlite3'
+import { verifyPassword } from '../crypto/argon.js'
 import type { AuthUser, Role } from '../types.js'
 
 /** Hierarchical role ranks: a higher rank inherits every lower rank's rights. */
@@ -47,6 +48,20 @@ export function requireProfileAction(db: Database.Database, user: AuthUser, prof
   if (canAccessProfile(db, user, profileId) && hasRank(user, 'editor')) return true
   reply.code(403).send({ error: 'Forbidden' })
   return false
+}
+
+/**
+ * Verify a password against the PROFILE OWNER's hash (not the requester's).
+ * The PII is encrypted with the owner's master password, so any actor running a
+ * scan/edit/decrypt — owner, a shared editor, or an admin — must supply that same
+ * password. This both gates access and yields the correct decryption key, while
+ * preserving zero-knowledge (the server still cannot decrypt without it).
+ */
+export async function verifyProfileMasterPassword(db: Database.Database, profileId: string, password: string): Promise<boolean> {
+  const owner = db.prepare('SELECT u.password_hash FROM profiles p JOIN users u ON u.id = p.user_id WHERE p.id = ?')
+    .get(profileId) as { password_hash: string } | undefined
+  if (!owner) return false
+  return verifyPassword(password, owner.password_hash)
 }
 
 /** Guard an owner/admin-only operation (edit, delete, share). */

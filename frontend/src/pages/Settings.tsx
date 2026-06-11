@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Copy, Check, UserPlus, Key, Loader2, CheckCircle2, XCircle, Trash2, Eye, EyeOff } from 'lucide-react'
 import { api } from '../api/client.js'
+import { UserManagement } from '../components/UserManagement.js'
 import type { Invitation } from '../types.js'
 
 const SL_KEY          = 'nyx_simplelogin_key'
@@ -304,6 +305,8 @@ export function Settings() {
           </div>
         )}
       </div>
+
+      <UserManagement />
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h2 className="font-semibold text-white mb-4">Pending invitations</h2>

@@ -48,6 +48,7 @@ export interface ProfileRow {
   encrypted_pii: string
   created_at: string
   redirect_email: string | null
+  owner_email?: string
 }
 
 export interface BrokerRow {

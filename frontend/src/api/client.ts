@@ -108,6 +108,13 @@ export const api = {
     list:   () => req('GET', '/invitations'),
   },
 
+  // User management (admin)
+  users: {
+    list:    () => req<import('../types.js').ManagedUser[]>('GET', '/users'),
+    setRole: (id: string, role: string) => req('PATCH', `/users/${id}/role`, { role }),
+    delete:  (id: string) => req('DELETE', `/users/${id}`),
+  },
+
   // Email configs
   emailConfig: {
     get:    (profileId: string) => req('GET', `/profiles/${profileId}/email-config`),

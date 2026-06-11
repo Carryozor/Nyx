@@ -1,17 +1,16 @@
 import type { FastifyInstance } from 'fastify'
 import { v4 as uuid } from 'uuid'
 import { getDb } from '../db/client.js'
-import { verifyPassword } from '../crypto/argon.js'
 import { deriveKey } from '../crypto/kdf.js'
 import { config } from '../config.js'
 import { encryptJobKey } from '../crypto/aes.js'
 import { requireAuth } from '../auth/middleware.js'
-import { requireProfileRead, requireProfileAction } from '../auth/access.js'
-import type { UserRow, ProfileRow, ScanScheduleRow } from '../types.js'
+import { requireProfileRead, requireProfileAction, verifyProfileMasterPassword } from '../auth/access.js'
+import type { ProfileRow, ScanScheduleRow } from '../types.js'
 
 export function registerScheduleRoutes(app: FastifyInstance): void {
 
-  app.post('/profiles/:id/schedule', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/profiles/:id/schedule', { preHandler: requireAuth, config: { rateLimit: { max: 15, timeWindow: '15 minutes' } } }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const { password, intervalDays } = req.body as { password: string; intervalDays: number }
 
@@ -24,8 +23,7 @@ export function registerScheduleRoutes(app: FastifyInstance): void {
     if (!profile) return reply.code(404).send({ error: 'Not found' })
     if (!requireProfileAction(db, req.user, id, reply)) return
 
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
-    if (!(await verifyPassword(password, user.password_hash))) {
+    if (!(await verifyProfileMasterPassword(db, id, password))) {
       return reply.code(401).send({ error: 'Wrong password' })
     }
 

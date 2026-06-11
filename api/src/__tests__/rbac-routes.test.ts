@@ -102,6 +102,26 @@ describe('profile sharing & access', () => {
     expect(viewerScan.statusCode).toBe(403)
   })
 
+  it('an editor scans with the OWNER master password, not their own', async () => {
+    // Owner and editor with DISTINCT passwords.
+    const inv1 = await app.inject({ method: 'POST', url: '/api/invitations', cookies: { nyx_session: adminCookie }, payload: { email: 'owner7@nyx.local', role: 'manager' } })
+    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { email: 'owner7@nyx.local', password: 'OwnerPass1!', invitationToken: inv1.json().token } })
+    const ownerCookie = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'owner7@nyx.local', password: 'OwnerPass1!' } })).cookies.find(c => c.name === 'nyx_session')!.value
+    const profileId = (await app.inject({ method: 'POST', url: '/api/profiles', cookies: { nyx_session: ownerCookie }, payload: { label: 'P', password: 'OwnerPass1!', pii: PII } })).json().id
+
+    const inv2 = await app.inject({ method: 'POST', url: '/api/invitations', cookies: { nyx_session: adminCookie }, payload: { email: 'ed7@nyx.local', role: 'editor' } })
+    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { email: 'ed7@nyx.local', password: 'EditorPass1!', invitationToken: inv2.json().token } })
+    const editorCookie = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'ed7@nyx.local', password: 'EditorPass1!' } })).cookies.find(c => c.name === 'nyx_session')!.value
+    await app.inject({ method: 'POST', url: `/api/profiles/${profileId}/shares`, cookies: { nyx_session: ownerCookie }, payload: { email: 'ed7@nyx.local' } })
+
+    // The editor's own password is rejected...
+    const own = await app.inject({ method: 'POST', url: '/api/scans', cookies: { nyx_session: editorCookie }, payload: { profileId, password: 'EditorPass1!', brokerIds: ['altares'] } })
+    expect(own.statusCode).toBe(401)
+    // ...but the owner's master password works.
+    const ok = await app.inject({ method: 'POST', url: '/api/scans', cookies: { nyx_session: editorCookie }, payload: { profileId, password: 'OwnerPass1!', brokerIds: ['altares'] } })
+    expect(ok.statusCode).toBe(201)
+  })
+
   it('only the owner or an admin can share; an editor cannot', async () => {
     const manager = await makeUser('o3@nyx.local', 'manager')
     const editor  = await makeUser('ed3@nyx.local', 'editor')

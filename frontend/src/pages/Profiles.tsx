@@ -54,6 +54,9 @@ export function Profiles() {
                 <h3 className="font-medium text-white">{p.label}</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Created {new Date(p.created_at).toLocaleDateString()}
+                  {p.owner_email && p.user_id !== user?.id && (
+                    <span className="ml-2 text-slate-400">· owner: {p.owner_email}</span>
+                  )}
                 </p>
               </div>
               <div className="flex items-center gap-3">

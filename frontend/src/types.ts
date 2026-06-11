@@ -19,6 +19,15 @@ export interface Profile {
   label: string
   created_at: string
   redirect_email?: string | null
+  owner_email?: string
+}
+
+export interface ManagedUser {
+  id: string
+  email: string
+  role: Role
+  created_at: string
+  invited_by: string | null
 }
 
 export interface CompanyInfo {

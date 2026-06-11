@@ -6,7 +6,7 @@ import { verifyPassword } from '../crypto/argon.js'
 import { deriveKey, generateSalt } from '../crypto/kdf.js'
 import { encrypt, decrypt } from '../crypto/aes.js'
 import { requireAuth, requireRole } from '../auth/middleware.js'
-import { requireProfileRead, requireProfileAction, requireOwnerOrAdmin } from '../auth/access.js'
+import { requireProfileRead, requireProfileAction, requireOwnerOrAdmin, verifyProfileMasterPassword } from '../auth/access.js'
 import type { UserRow, ProfileRow, ProfilePII } from '../types.js'
 
 const AddressSchema = z.object({
@@ -41,7 +41,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   app.get('/profiles', { preHandler: requireAuth }, async (req, reply) => {
     const db = getDb()
     const rows: ProfileRow[] = req.user.role === 'admin'
-      ? db.prepare('SELECT id, user_id, label, created_at, redirect_email FROM profiles ORDER BY created_at DESC').all() as ProfileRow[]
+      ? db.prepare('SELECT p.id, p.user_id, p.label, p.created_at, p.redirect_email, u.email AS owner_email FROM profiles p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC').all() as ProfileRow[]
       : db.prepare(`
           SELECT DISTINCT p.id, p.user_id, p.label, p.created_at, p.redirect_email
           FROM profiles p
@@ -120,7 +120,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     return reply.send({ id, redirect_email })
   })
 
-  app.post('/profiles/:id/decrypt', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/profiles/:id/decrypt', { preHandler: requireAuth, config: { rateLimit: { max: 15, timeWindow: '15 minutes' } } }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const { password } = req.body as { password: string }
 
@@ -131,8 +131,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     if (!profile) return reply.code(404).send({ error: 'Profile not found' })
     if (!requireOwnerOrAdmin(db, req.user, id, reply)) return
 
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
-    if (!(await verifyPassword(password, user.password_hash))) {
+    // Verify against the owner's master password (the PII is encrypted with it), so an
+    // admin can decrypt another user's profile when given that password.
+    if (!(await verifyProfileMasterPassword(db, id, password))) {
       return reply.code(401).send({ error: 'Wrong password' })
     }
 
@@ -149,7 +150,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     return reply.send({ id, label: profile.label, pii })
   })
 
-  app.patch('/profiles/:id', { preHandler: requireAuth }, async (req, reply) => {
+  app.patch('/profiles/:id', { preHandler: requireAuth, config: { rateLimit: { max: 15, timeWindow: '15 minutes' } } }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const { label, password, pii } = req.body as { label?: string; password: string; pii?: ProfilePII }
 
@@ -160,8 +161,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     if (!profile) return reply.code(404).send({ error: 'Not found' })
     if (!requireOwnerOrAdmin(db, req.user, id, reply)) return
 
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as UserRow
-    if (!(await verifyPassword(password, user.password_hash))) {
+    if (!(await verifyProfileMasterPassword(db, id, password))) {
       return reply.code(401).send({ error: 'Wrong password' })
     }
 
