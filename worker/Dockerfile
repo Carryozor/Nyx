@@ -22,6 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
+# npm mineur (11.12 -> 11.21.2) : embarque tar 7.5.22 (CVE-2026-59873 corrigée)
+RUN npm install -g --no-fund --no-audit npm@11.21.2 && npm cache clean --force
+
 COPY package.json ./
 RUN npm install --omit=dev
 
