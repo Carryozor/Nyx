@@ -28,6 +28,9 @@ RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/db/migrations ./dist/db/migrations
 
+# Non-root : uid 1000 (utilisateur "node" de l'image de base)
+USER node
+
 EXPOSE 3000
 
 CMD ["node", "dist/index.js"]

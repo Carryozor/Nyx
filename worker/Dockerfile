@@ -27,4 +27,7 @@ RUN npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
+# Non-root : uid 1000 (utilisateur "pwuser" de l'image Playwright) ; chromium lance déjà --no-sandbox
+USER pwuser
+
 CMD ["node", "dist/index.js"]
